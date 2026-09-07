@@ -6,7 +6,8 @@ publish_to: "none"
 version: 1.0.0+1
 
 environment:
-  sdk: ">=3.9.0 <4.0.0"
+  sdk: ">=3.10.0 <4.0.0"
+
 
 dependencies:
   flutter:
@@ -49,9 +50,11 @@ dev_dependencies:
     sdk: flutter
 
   flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.14.4
 
   build_runner: ^2.7.0
   json_serializable: ^6.11.1
+  flutter_native_splash: ^2.4.8
 
 flutter:
 
@@ -63,3 +66,21 @@ flutter:
     - assets/logos/
 
   fonts: []
+
+flutter_launcher_icons:
+  android: true
+  ios: false
+  image_path: "assets/logos/josekiarie_pharmacy_logo.png"
+  adaptive_icon_background: "#FFFFFF"
+
+flutter_native_splash:
+  color: "#FFFFFF"
+  image: assets/logos/josekiarie_pharmacy_logo.png
+
+  android: true
+  ios: false
+  web: false
+
+  android_12:
+    color: "#FFFFFF"
+    image: assets/logos/josekiarie_pharmacy_logo.png

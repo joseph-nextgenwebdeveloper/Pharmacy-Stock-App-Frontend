@@ -1,6 +1,16 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    
+    <uses-permission android:name="android.permission.INTERNET"/>
+
+    <uses-permission android:name="android.permission.CAMERA"/>
+
+    <uses-feature
+    android:name="android.hardware.camera"
+    android:required="false"/>
+
+
     <application
-        android:label="pharmacy_app"
+        android:label="JoseKiarie Pharmacy"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity
