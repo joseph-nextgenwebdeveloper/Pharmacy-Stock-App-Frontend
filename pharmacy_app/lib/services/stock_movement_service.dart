@@ -1,12 +1,13 @@
 import 'package:dio/dio.dart';
 
-import '../models/sale.dart';
+import '../models/stock_movement.dart';
 import 'api_service.dart';
 
-class SaleService {
-  static const String _endpoint = '/sales/';
+class StockMovementService {
+  static const String _endpoint =
+      '/inventory/stock-movements/';
 
-  static Future<List<Sale>> getSales() async {
+  static Future<List<StockMovement>> getStockMovements() async {
     try {
       final response = await ApiService.dio.get(_endpoint);
 
@@ -15,7 +16,7 @@ class SaleService {
       if (data is List) {
         return data
             .map(
-              (json) => Sale.fromJson(
+              (json) => StockMovement.fromJson(
                 json as Map<String, dynamic>,
               ),
             )
@@ -26,7 +27,7 @@ class SaleService {
           data['results'] is List) {
         return (data['results'] as List)
             .map(
-              (json) => Sale.fromJson(
+              (json) => StockMovement.fromJson(
                 json as Map<String, dynamic>,
               ),
             )
@@ -37,40 +38,24 @@ class SaleService {
     } on DioException catch (e) {
       throw Exception(
         e.response?.data?['detail'] ??
-            'Failed to load sales.',
+            'Failed to load stock movements.',
       );
     }
   }
 
-  static Future<Sale> getSale(int id) async {
+  static Future<StockMovement> getStockMovement(
+    int id,
+  ) async {
     try {
       final response = await ApiService.dio.get(
         '$_endpoint$id/',
       );
 
-      return Sale.fromJson(response.data);
+      return StockMovement.fromJson(response.data);
     } on DioException catch (e) {
       throw Exception(
         e.response?.data?['detail'] ??
-            'Failed to load sale.',
-      );
-    }
-  }
-
-  static Future<Sale> createSale(
-    Sale sale,
-  ) async {
-    try {
-      final response = await ApiService.dio.post(
-        _endpoint,
-        data: sale.toJson(),
-      );
-
-      return Sale.fromJson(response.data);
-    } on DioException catch (e) {
-      throw Exception(
-        e.response?.data.toString() ??
-            'Failed to create sale.',
+            'Failed to load stock movement.',
       );
     }
   }
