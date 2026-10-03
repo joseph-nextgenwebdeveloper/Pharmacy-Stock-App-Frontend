@@ -48,7 +48,9 @@ class SaleService {
         '$_endpoint$id/',
       );
 
-      return Sale.fromJson(response.data);
+      return Sale.fromJson(
+        response.data as Map<String, dynamic>,
+      );
     } on DioException catch (e) {
       throw Exception(
         e.response?.data?['detail'] ??
@@ -66,7 +68,9 @@ class SaleService {
         data: sale.toJson(),
       );
 
-      return Sale.fromJson(response.data);
+      return Sale.fromJson(
+        response.data as Map<String, dynamic>,
+      );
     } on DioException catch (e) {
       throw Exception(
         e.response?.data.toString() ??

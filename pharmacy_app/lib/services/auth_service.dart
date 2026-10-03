@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import 'api_service.dart';
@@ -26,7 +28,6 @@ class AuthService {
       );
 
       final data = response.data;
-
       final accessToken = data['access'];
       final refreshToken = data['refresh'];
 
@@ -65,13 +66,81 @@ class AuthService {
     }
   }
 
-  static Future<String?> getAccessToken() async {
-    return _storage.read(key: _accessTokenKey);
+  static Future<String?> register({
+    required String username,
+    String? firstName,
+    String? lastName,
+    required String email,
+    String? phoneNumber,
+    required String password,
+  }) async {
+    try {
+      final data = {
+        'username': username,
+        'email': email,
+        'password': password,
+      };
+
+      if (firstName != null && firstName.trim().isNotEmpty) {
+        data['first_name'] = firstName.trim();
+      }
+
+      if (lastName != null && lastName.trim().isNotEmpty) {
+        data['last_name'] = lastName.trim();
+      }
+
+      if (phoneNumber != null &&
+          phoneNumber.trim().isNotEmpty) {
+        data['phone_number'] = phoneNumber.trim();
+      }
+
+      await ApiService.dio.post(
+        '/accounts/register/',
+        data: data,
+      );
+
+      return null;
+    } on DioException catch (e) {
+      debugPrint(
+        'REGISTER ERROR TYPE: ${e.type}',
+      );
+      debugPrint(
+        'REGISTER ERROR MESSAGE: ${e.message}',
+      );
+      debugPrint(
+        'REGISTER ERROR STATUS: ${e.response?.statusCode}',
+      );
+      debugPrint(
+        'REGISTER ERROR DATA: ${e.response?.data}',
+      );
+
+      final responseData = e.response?.data;
+
+      if (responseData is Map) {
+        for (final entry in responseData.entries) {
+          final value = entry.value;
+
+          if (value is List && value.isNotEmpty) {
+            return value.first.toString();
+          }
+
+          if (value is String && value.isNotEmpty) {
+            return value;
+          }
+        }
+      }
+
+      return 'Registration failed. Please check your details and try again.';
+    } catch (_) {
+      return 'Registration failed. Please try again.';
+    }
   }
 
-  static Future<String?> getRefreshToken() async {
-    return _storage.read(key: _refreshTokenKey);
-  }
+  static Future<String?> getAccessToken() async =>
+      _storage.read(key: _accessTokenKey);
+
+  static Future<String?> getRefreshToken() async =>
+      _storage.read(key: _refreshTokenKey);
 
   static Future<Map<String, dynamic>?> getUser() async {
     final userData = await _storage.read(key: _userKey);

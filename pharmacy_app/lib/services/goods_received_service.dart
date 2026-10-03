@@ -1,12 +1,12 @@
 import 'package:dio/dio.dart';
 
-import '../models/supplier.dart';
+import '../models/goods_received.dart';
 import 'api_service.dart';
 
-class SupplierService {
-  static const String _endpoint = '/suppliers/';
+class GoodsReceivedService {
+  static const String _endpoint = '/purchases/goods-received/';
 
-  static Future<List<Supplier>> getSuppliers() async {
+  static Future<List<GoodsReceived>> getGoodsReceived() async {
     try {
       final response = await ApiService.dio.get(_endpoint);
 
@@ -14,14 +14,22 @@ class SupplierService {
 
       if (data is List) {
         return data
-            .map((json) => Supplier.fromJson(json))
+            .map(
+              (json) => GoodsReceived.fromJson(
+                json as Map<String, dynamic>,
+              ),
+            )
             .toList();
       }
 
       if (data is Map<String, dynamic> &&
           data['results'] is List) {
         return (data['results'] as List)
-            .map((json) => Supplier.fromJson(json))
+            .map(
+              (json) => GoodsReceived.fromJson(
+                json as Map<String, dynamic>,
+              ),
+            )
             .toList();
       }
 
@@ -29,58 +37,46 @@ class SupplierService {
     } on DioException catch (e) {
       throw Exception(
         e.response?.data?['detail'] ??
-            'Failed to load suppliers.',
+            'Failed to load deliveries.',
       );
     }
   }
 
-  static Future<Supplier> getSupplier(int id) async {
+  static Future<GoodsReceived> getGoodsReceivedDetail(
+    int id,
+  ) async {
     try {
       final response = await ApiService.dio.get(
         '$_endpoint$id/',
       );
 
-      return Supplier.fromJson(response.data);
+      return GoodsReceived.fromJson(
+        response.data as Map<String, dynamic>,
+      );
     } on DioException catch (e) {
       throw Exception(
         e.response?.data?['detail'] ??
-            'Failed to load supplier.',
+            'Failed to load delivery.',
       );
     }
   }
 
-  static Future<Supplier> createSupplier(
-      Supplier supplier) async {
+  static Future<GoodsReceived> createGoodsReceived(
+    GoodsReceived goodsReceived,
+  ) async {
     try {
       final response = await ApiService.dio.post(
         _endpoint,
-        data: supplier.toJson(),
+        data: goodsReceived.toJson(),
       );
 
-      return Supplier.fromJson(response.data);
+      return GoodsReceived.fromJson(
+        response.data as Map<String, dynamic>,
+      );
     } on DioException catch (e) {
       throw Exception(
         e.response?.data.toString() ??
-            'Failed to create supplier.',
-      );
-    }
-  }
-
-  static Future<Supplier> updateSupplier(
-    int id,
-    Supplier supplier,
-  ) async {
-    try {
-      final response = await ApiService.dio.put(
-        '$_endpoint$id/',
-        data: supplier.toJson(),
-      );
-
-      return Supplier.fromJson(response.data);
-    } on DioException catch (e) {
-      throw Exception(
-        e.response?.data.toString() ??
-            'Failed to update supplier.',
+            'Failed to save delivery.',
       );
     }
   }

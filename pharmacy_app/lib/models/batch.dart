@@ -19,7 +19,9 @@ class Batch {
     required this.receivedDate,
   });
 
-  factory Batch.fromJson(Map<String, dynamic> json) {
+  factory Batch.fromJson(
+    Map<String, dynamic> json,
+  ) {
     return Batch(
       id: json['id'] ?? 0,
       medicineId: json['medicine'] ?? 0,
@@ -37,14 +39,12 @@ class Batch {
 
   Map<String, dynamic> toJson() {
     return {
-      'id': id,
       'medicine': medicineId,
       'batch_number': batchNumber,
       'manufacture_date': manufactureDate,
       'expiry_date': expiryDate,
       'quantity': quantity,
       'buying_price': buyingPrice,
-      'received_date': receivedDate,
     };
   }
 }

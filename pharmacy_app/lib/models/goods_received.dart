@@ -1,4 +1,5 @@
 import 'goods_received_item.dart';
+
 class GoodsReceived {
   final int id;
   final int supplier;
@@ -18,7 +19,9 @@ class GoodsReceived {
     required this.items,
   });
 
-  factory GoodsReceived.fromJson(Map<String, dynamic> json) {
+  factory GoodsReceived.fromJson(
+    Map<String, dynamic> json,
+  ) {
     return GoodsReceived(
       id: json['id'] ?? 0,
       supplier: json['supplier'] ?? 0,
@@ -38,11 +41,8 @@ class GoodsReceived {
 
   Map<String, dynamic> toJson() {
     return {
-      'id': id,
       'supplier': supplier,
       'invoice_number': invoiceNumber,
-      'received_date': receivedDate,
-      'received_by': receivedBy,
       'notes': notes,
       'items': items.map((e) => e.toJson()).toList(),
     };

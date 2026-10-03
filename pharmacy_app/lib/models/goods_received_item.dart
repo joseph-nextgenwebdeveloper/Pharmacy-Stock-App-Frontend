@@ -27,7 +27,8 @@ class GoodsReceivedItem {
       manufactureDate: json['manufacture_date'] ?? '',
       expiryDate: json['expiry_date'] ?? '',
       quantity: json['quantity'] ?? 0,
-      buyingPrice: double.tryParse(
+      buyingPrice:
+          double.tryParse(
             json['buying_price'].toString(),
           ) ??
           0.0,
@@ -36,7 +37,6 @@ class GoodsReceivedItem {
 
   Map<String, dynamic> toJson() {
     return {
-      'id': id,
       'medicine': medicine,
       'batch_number': batchNumber,
       'manufacture_date': manufactureDate,

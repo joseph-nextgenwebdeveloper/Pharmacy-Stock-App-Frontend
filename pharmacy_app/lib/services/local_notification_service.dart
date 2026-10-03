@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/data/latest.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
@@ -9,6 +10,10 @@ class LocalNotificationService {
   static const int _dailyReminderId = 1001;
 
   static Future<void> initialize() async {
+    if (kIsWeb) {
+      return;
+    }
+
     tz.initializeTimeZones();
 
     const androidSettings = AndroidInitializationSettings(
@@ -19,16 +24,19 @@ class LocalNotificationService {
       android: androidSettings,
     );
 
-    await _notifications.initialize(
-      settings: initializationSettings,
-    );
+    // `initialize` takes the settings object positionally.
+    await _notifications.initialize(initializationSettings);
 
     await _requestPermissions();
   }
 
   static Future<void> _requestPermissions() async {
-    final androidImplementation =
-        _notifications.resolvePlatformSpecificImplementation<
+    if (kIsWeb) {
+      return;
+    }
+
+    final androidImplementation = _notifications
+        .resolvePlatformSpecificImplementation<
             AndroidFlutterLocalNotificationsPlugin>();
 
     await androidImplementation?.requestNotificationsPermission();
@@ -38,9 +46,12 @@ class LocalNotificationService {
     int hour = 8,
     int minute = 0,
   }) async {
-    await _notifications.cancel(
-      id: _dailyReminderId,
-    );
+    if (kIsWeb) {
+      return;
+    }
+
+    // `cancel` takes the notification id positionally.
+    await _notifications.cancel(_dailyReminderId);
 
     final now = tz.TZDateTime.now(tz.local);
 
@@ -54,17 +65,17 @@ class LocalNotificationService {
     );
 
     if (!scheduledDate.isAfter(now)) {
-      scheduledDate = scheduledDate.add(
-        const Duration(days: 1),
-      );
+      scheduledDate = scheduledDate.add(const Duration(days: 1));
     }
 
+    // id, title, body, scheduledDate and notificationDetails are all
+    // positional; only androidScheduleMode / matchDateTimeComponents are named.
     await _notifications.zonedSchedule(
-      id: _dailyReminderId,
-      title: 'Daily Inventory Reminder',
-      body: 'Remember to review today\'s pharmacy inventory.',
-      scheduledDate: scheduledDate,
-      notificationDetails: const NotificationDetails(
+      _dailyReminderId,
+      'Daily Inventory Reminder',
+      'Remember to review today\'s pharmacy inventory.',
+      scheduledDate,
+      const NotificationDetails(
         android: AndroidNotificationDetails(
           'daily_inventory_reminder',
           'Daily Inventory Reminders',
@@ -74,16 +85,18 @@ class LocalNotificationService {
           priority: Priority.defaultPriority,
         ),
       ),
-      androidScheduleMode:
-          AndroidScheduleMode.inexactAllowWhileIdle,
-      matchDateTimeComponents:
-          DateTimeComponents.time,
+      androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+      uiLocalNotificationDateInterpretation:
+          UILocalNotificationDateInterpretation.absoluteTime,
+      matchDateTimeComponents: DateTimeComponents.time,
     );
   }
 
   static Future<void> cancelDailyInventoryReminder() async {
-    await _notifications.cancel(
-      id: _dailyReminderId,
-    );
+    if (kIsWeb) {
+      return;
+    }
+
+    await _notifications.cancel(_dailyReminderId);
   }
 }

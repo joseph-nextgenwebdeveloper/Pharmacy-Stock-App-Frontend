@@ -9,32 +9,8 @@ class StockMovementService {
 
   static Future<List<StockMovement>> getStockMovements() async {
     try {
-      final response = await ApiService.dio.get(_endpoint);
-
-      final data = response.data;
-
-      if (data is List) {
-        return data
-            .map(
-              (json) => StockMovement.fromJson(
-                json as Map<String, dynamic>,
-              ),
-            )
-            .toList();
-      }
-
-      if (data is Map<String, dynamic> &&
-          data['results'] is List) {
-        return (data['results'] as List)
-            .map(
-              (json) => StockMovement.fromJson(
-                json as Map<String, dynamic>,
-              ),
-            )
-            .toList();
-      }
-
-      return [];
+      final items = await ApiService.getAllPages(_endpoint);
+      return items.map(StockMovement.fromJson).toList();
     } on DioException catch (e) {
       throw Exception(
         e.response?.data?['detail'] ??
@@ -57,6 +33,45 @@ class StockMovementService {
         e.response?.data?['detail'] ??
             'Failed to load stock movement.',
       );
+    }
+  }
+
+  /// Records a stock in / stock out / correction movement.
+  ///
+  /// [movementType] should match whatever choices the backend's
+  /// StockMovement.movement_type field expects (e.g. "IN", "OUT",
+  /// "ADJUSTMENT"). Adjust the strings used from the UI if the backend
+  /// uses different values.
+  static Future<StockMovement> createMovement({
+    required int medicineId,
+    int? batchId,
+    required int quantity,
+    required String movementType,
+    String? note,
+  }) async {
+    try {
+      final response = await ApiService.dio.post(
+        _endpoint,
+        data: {
+          'medicine': medicineId,
+          if (batchId != null) 'batch': batchId,
+          'quantity': quantity,
+          'movement_type': movementType,
+          if (note != null && note.isNotEmpty) 'note': note,
+        },
+      );
+
+      return StockMovement.fromJson(
+        response.data as Map<String, dynamic>,
+      );
+    } on DioException catch (e) {
+      final data = e.response?.data;
+
+      if (data is Map<String, dynamic>) {
+        throw Exception(data.toString());
+      }
+
+      throw Exception('Failed to record stock movement.');
     }
   }
 }

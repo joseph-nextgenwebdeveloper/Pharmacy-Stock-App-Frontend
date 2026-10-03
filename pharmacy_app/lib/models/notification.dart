@@ -17,27 +17,18 @@ class AppNotification {
     required this.createdAt,
   });
 
-  factory AppNotification.fromJson(Map<String, dynamic> json) {
+  factory AppNotification.fromJson(
+    Map<String, dynamic> json,
+  ) {
     return AppNotification(
       id: json['id'] ?? 0,
       receiverId: json['receiver'] ?? 0,
-      notificationType: json['notification_type'] ?? '',
+      notificationType:
+          json['notification_type'] ?? '',
       title: json['title'] ?? '',
       message: json['message'] ?? '',
       isRead: json['is_read'] ?? false,
       createdAt: json['created_at'] ?? '',
     );
-  }
-
-  Map<String, dynamic> toJson() {
-    return {
-      'id': id,
-      'receiver': receiverId,
-      'notification_type': notificationType,
-      'title': title,
-      'message': message,
-      'is_read': isRead,
-      'created_at': createdAt,
-    };
   }
 }

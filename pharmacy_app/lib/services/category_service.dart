@@ -6,26 +6,8 @@ import 'api_service.dart';
 class CategoryService {
   static Future<List<Category>> getCategories() async {
     try {
-      final response = await ApiService.dio.get(
-        '/inventory/categories/',
-      );
-
-      final data = response.data;
-
-      if (data is List) {
-        return data
-            .map((json) => Category.fromJson(json))
-            .toList();
-      }
-
-      if (data is Map<String, dynamic> &&
-          data['results'] is List) {
-        return (data['results'] as List)
-            .map((json) => Category.fromJson(json))
-            .toList();
-      }
-
-      return [];
+      final items = await ApiService.getAllPages('/inventory/categories/');
+      return items.map(Category.fromJson).toList();
     } on DioException catch (e) {
       throw Exception(
         e.response?.data?['detail'] ??
@@ -46,6 +28,31 @@ class CategoryService {
         e.response?.data?['detail'] ??
             'Failed to load category.',
       );
+    }
+  }
+
+  static Future<Category> createCategory({
+    required String name,
+    String description = '',
+  }) async {
+    try {
+      final response = await ApiService.dio.post(
+        '/inventory/categories/',
+        data: {
+          'name': name,
+          'description': description,
+        },
+      );
+
+      return Category.fromJson(response.data as Map<String, dynamic>);
+    } on DioException catch (e) {
+      final data = e.response?.data;
+
+      if (data is Map<String, dynamic>) {
+        throw Exception(data.toString());
+      }
+
+      throw Exception('Failed to create category.');
     }
   }
 }

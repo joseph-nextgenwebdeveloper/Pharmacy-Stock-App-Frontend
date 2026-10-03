@@ -23,7 +23,9 @@ class Supplier {
     required this.updatedAt,
   });
 
-  factory Supplier.fromJson(Map<String, dynamic> json) {
+  factory Supplier.fromJson(
+    Map<String, dynamic> json,
+  ) {
     return Supplier(
       id: json['id'] ?? 0,
       name: json['name'] ?? '',
@@ -40,7 +42,6 @@ class Supplier {
 
   Map<String, dynamic> toJson() {
     return {
-      'id': id,
       'name': name,
       'company_name': companyName,
       'contact_person': contactPerson,
@@ -48,8 +49,6 @@ class Supplier {
       'phone_number': phoneNumber,
       'address': address,
       'is_active': isActive,
-      'created_at': createdAt,
-      'updated_at': updatedAt,
     };
   }
 }
