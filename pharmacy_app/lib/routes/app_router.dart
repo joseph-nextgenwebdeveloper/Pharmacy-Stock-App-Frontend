@@ -6,11 +6,14 @@ import '../screens/auth/login_screen.dart';
 import '../screens/auth/register_screen.dart';
 import '../screens/dashboard/dashboard_screen.dart';
 import '../screens/inventory/add_medicine_screen.dart';
+import '../screens/inventory/batch_detail_screen.dart';
 import '../screens/inventory/batches_screen.dart';
+import '../screens/inventory/create_batch_screen.dart';
 import '../screens/inventory/inventory_screen.dart';
 import '../screens/main/main_screen.dart';
 import '../screens/medicine/medicine_detail_screen.dart';
 import '../screens/movement/movement_history_screen.dart';
+import '../screens/activity/activity_screen.dart';
 import '../screens/profile/profile_screen.dart';
 import '../screens/purchases/purchase_screen.dart';
 import '../screens/reports/reports_screen.dart';
@@ -76,13 +79,41 @@ class AppRouter {
           ),
           GoRoute(
             path: RouteNames.addMedicine,
-            builder: (context, state) =>
-                const AddMedicineScreen(),
+            builder: (context, state) => AddMedicineScreen(
+              initialBarcode: state.uri.queryParameters['barcode'],
+            ),
           ),
           GoRoute(
             path: RouteNames.batches,
             builder: (context, state) =>
                 const BatchesScreen(),
+          ),
+          // Must stay above '/inventory/batches/:id' so "new" isn't read as an id.
+          GoRoute(
+            path: RouteNames.createBatch,
+            builder: (context, state) {
+              final q = state.uri.queryParameters;
+
+              return CreateBatchScreen(
+                initialMedicineId: int.tryParse(q['medicine'] ?? ''),
+                initialBatchNumber: q['batch'],
+                initialExpiry: DateTime.tryParse(q['expiry'] ?? ''),
+              );
+            },
+          ),
+          GoRoute(
+            path: '${RouteNames.batches}/:id',
+            builder: (context, state) {
+              final id = int.tryParse(state.pathParameters['id'] ?? '');
+
+              if (id == null) {
+                return const Scaffold(
+                  body: Center(child: Text('Invalid batch ID.')),
+                );
+              }
+
+              return BatchDetailScreen(batchId: id);
+            },
           ),
           GoRoute(
             path: '${RouteNames.medicine}/:id',
@@ -128,13 +159,20 @@ class AppRouter {
           ),
           GoRoute(
             path: RouteNames.scanner,
-            builder: (context, state) =>
-                const ScannerScreen(),
+            builder: (context, state) => ScannerScreen(
+              pickMode: state.uri.queryParameters['pick'] == '1',
+            ),
           ),
           GoRoute(
             path: RouteNames.alerts,
             builder: (context, state) =>
                 const AlertsScreen(),
+          ),
+          GoRoute(
+            path: RouteNames.activity,
+            builder: (context, state) => ActivityScreen(
+              team: state.uri.queryParameters['team'] == '1',
+            ),
           ),
           GoRoute(
             path: RouteNames.profile,

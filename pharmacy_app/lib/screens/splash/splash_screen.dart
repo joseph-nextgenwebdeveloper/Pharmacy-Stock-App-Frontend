@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../../config/app_colors.dart';
 import '../../providers/auth_provider.dart';
 import '../../routes/route_names.dart';
+import '../../widgets/brand_logo.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -46,30 +47,25 @@ class _SplashScreenState extends State<SplashScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             Container(
-              width: 64,
-              height: 64,
+              padding: const EdgeInsets.all(18),
               decoration: BoxDecoration(
-                color: AppColors.primary,
-                borderRadius: BorderRadius.circular(18),
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(28),
               ),
-              child: const Icon(
-                Icons.inventory_2_rounded,
-                color: Color(0xFF06170C),
-                size: 30,
-              ),
+              child: const BrandLogo(height: 130),
             ),
-            const SizedBox(height: 18),
+            const SizedBox(height: 22),
             const Text(
-              'StockRoom',
+              'JoseKiarie Pharmacy',
               style: TextStyle(
                 color: Colors.white,
-                fontSize: 26,
+                fontSize: 24,
                 fontWeight: FontWeight.w800,
               ),
             ),
             const SizedBox(height: 4),
             const Text(
-              'Pharmacy Inventory',
+              'Your Health, Our Priority',
               style: TextStyle(
                 color: Color(0xFFB9BEB9),
                 fontWeight: FontWeight.w700,

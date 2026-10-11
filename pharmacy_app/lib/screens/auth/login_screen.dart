@@ -6,6 +6,7 @@ import '../../config/app_colors.dart';
 import '../../config/app_text_styles.dart';
 import '../../providers/auth_provider.dart';
 import '../../routes/route_names.dart';
+import '../../widgets/brand_logo.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -57,18 +58,9 @@ class _LoginScreenState extends State<LoginScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        Container(
-                          width: 56,
-                          height: 56,
-                          decoration: BoxDecoration(
-                            color: AppColors.primary,
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                          child: const Icon(
-                            Icons.inventory_2_rounded,
-                            color: Color(0xFF06170C),
-                            size: 26,
-                          ),
+                        const Align(
+                          alignment: Alignment.centerLeft,
+                          child: BrandLogo(height: 96),
                         ),
                         const SizedBox(height: 18),
                         Text('Welcome back', style: AppTextStyles.headingLarge),

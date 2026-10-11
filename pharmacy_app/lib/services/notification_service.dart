@@ -2,43 +2,42 @@ import 'package:dio/dio.dart';
 
 import '../models/notification.dart';
 import 'api_service.dart';
+import 'cache_service.dart';
 
 class NotificationService {
   static const String _endpoint = '/notifications/';
+  static const String cacheKey = 'notifications';
+
+  static Future<List<AppNotification>> getCachedNotifications() async {
+    final items = await CacheService.readList(cacheKey);
+    return items.map(AppNotification.fromJson).toList();
+  }
 
   static Future<List<AppNotification>> getNotifications() async {
     try {
-      final response = await ApiService.dio.get(_endpoint);
+      final response = await ApiService.dio.get(
+        _endpoint,
+        queryParameters: {'page_size': 100},
+      );
 
       final data = response.data;
+      List raw = const [];
 
       if (data is List) {
-        return data
-            .map(
-              (json) => AppNotification.fromJson(
-                json as Map<String, dynamic>,
-              ),
-            )
-            .toList();
+        raw = data;
+      } else if (data is Map<String, dynamic> && data['results'] is List) {
+        raw = data['results'] as List;
       }
 
-      if (data is Map<String, dynamic> &&
-          data['results'] is List) {
-        return (data['results'] as List)
-            .map(
-              (json) => AppNotification.fromJson(
-                json as Map<String, dynamic>,
-              ),
-            )
-            .toList();
-      }
+      final items = raw
+          .whereType<Map>()
+          .map((m) => Map<String, dynamic>.from(m))
+          .toList();
 
-      return [];
+      await CacheService.write(cacheKey, items);
+      return items.map(AppNotification.fromJson).toList();
     } on DioException catch (e) {
-      throw Exception(
-        e.response?.data?['detail'] ??
-            'Failed to load notifications.',
-      );
+      throw ApiService.exceptionFor(e, 'Failed to load notifications.');
     }
   }
 
@@ -54,10 +53,7 @@ class NotificationService {
         response.data as Map<String, dynamic>,
       );
     } on DioException catch (e) {
-      throw Exception(
-        e.response?.data?['detail'] ??
-            'Failed to load notification.',
-      );
+      throw ApiService.exceptionFor(e, 'Failed to load notification.');
     }
   }
 
@@ -73,10 +69,15 @@ class NotificationService {
         response.data as Map<String, dynamic>,
       );
     } on DioException catch (e) {
-      throw Exception(
-        e.response?.data?['detail'] ??
-            'Failed to mark notification as read.',
-      );
+      throw ApiService.exceptionFor(e, 'Failed to mark notification as read.');
+    }
+  }
+
+  static Future<void> markAllAsRead() async {
+    try {
+      await ApiService.dio.post('${_endpoint}mark-all-read/');
+    } on DioException catch (e) {
+      throw ApiService.exceptionFor(e, 'Failed to mark notifications as read.');
     }
   }
 }

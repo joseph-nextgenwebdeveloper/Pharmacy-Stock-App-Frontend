@@ -6,6 +6,7 @@ class GoodsReceivedItem {
   final String expiryDate;
   final int quantity;
   final double buyingPrice;
+  final double sellingPrice;
 
   const GoodsReceivedItem({
     required this.id,
@@ -15,6 +16,7 @@ class GoodsReceivedItem {
     required this.expiryDate,
     required this.quantity,
     required this.buyingPrice,
+    this.sellingPrice = 0,
   });
 
   factory GoodsReceivedItem.fromJson(
@@ -32,6 +34,11 @@ class GoodsReceivedItem {
             json['buying_price'].toString(),
           ) ??
           0.0,
+      sellingPrice:
+          double.tryParse(
+            json['selling_price']?.toString() ?? '0',
+          ) ??
+          0.0,
     );
   }
 
@@ -39,10 +46,11 @@ class GoodsReceivedItem {
     return {
       'medicine': medicine,
       'batch_number': batchNumber,
-      'manufacture_date': manufactureDate,
+      if (manufactureDate.isNotEmpty) 'manufacture_date': manufactureDate,
       'expiry_date': expiryDate,
       'quantity': quantity,
       'buying_price': buyingPrice,
+      'selling_price': sellingPrice,
     };
   }
 }

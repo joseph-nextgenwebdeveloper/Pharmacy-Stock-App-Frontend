@@ -2,43 +2,41 @@ import 'package:dio/dio.dart';
 
 import '../models/goods_received.dart';
 import 'api_service.dart';
+import 'cache_service.dart';
 
 class GoodsReceivedService {
   static const String _endpoint = '/purchases/goods-received/';
+  static const String cacheKey = 'goods_received';
+
+  static List<Map<String, dynamic>> _rows(dynamic data) {
+    List raw = const [];
+    if (data is List) {
+      raw = data;
+    } else if (data is Map<String, dynamic> && data['results'] is List) {
+      raw = data['results'] as List;
+    }
+    return raw
+        .whereType<Map>()
+        .map((m) => Map<String, dynamic>.from(m))
+        .toList();
+  }
+
+  static Future<List<GoodsReceived>> getCachedGoodsReceived() async {
+    final items = await CacheService.readList(cacheKey);
+    return items.map(GoodsReceived.fromJson).toList();
+  }
 
   static Future<List<GoodsReceived>> getGoodsReceived() async {
     try {
       final response = await ApiService.dio.get(_endpoint);
-
-      final data = response.data;
-
-      if (data is List) {
-        return data
-            .map(
-              (json) => GoodsReceived.fromJson(
-                json as Map<String, dynamic>,
-              ),
-            )
-            .toList();
-      }
-
-      if (data is Map<String, dynamic> &&
-          data['results'] is List) {
-        return (data['results'] as List)
-            .map(
-              (json) => GoodsReceived.fromJson(
-                json as Map<String, dynamic>,
-              ),
-            )
-            .toList();
-      }
-
-      return [];
-    } on DioException catch (e) {
-      throw Exception(
-        e.response?.data?['detail'] ??
-            'Failed to load deliveries.',
+      final items = _rows(response.data);
+      await CacheService.write(
+        cacheKey,
+        items.length > 200 ? items.sublist(0, 200) : items,
       );
+      return items.map(GoodsReceived.fromJson).toList();
+    } on DioException catch (e) {
+      throw ApiService.exceptionFor(e, 'Failed to load deliveries.');
     }
   }
 
@@ -54,10 +52,7 @@ class GoodsReceivedService {
         response.data as Map<String, dynamic>,
       );
     } on DioException catch (e) {
-      throw Exception(
-        e.response?.data?['detail'] ??
-            'Failed to load delivery.',
-      );
+      throw ApiService.exceptionFor(e, 'Failed to load delivery.');
     }
   }
 
@@ -74,10 +69,7 @@ class GoodsReceivedService {
         response.data as Map<String, dynamic>,
       );
     } on DioException catch (e) {
-      throw Exception(
-        e.response?.data.toString() ??
-            'Failed to save delivery.',
-      );
+      throw ApiService.exceptionFor(e, 'Failed to save delivery.');
     }
   }
 }

@@ -8,6 +8,7 @@ import '../services/category_service.dart';
 class CategoryProvider extends ChangeNotifier {
   List<Category> _categories = [];
   bool _isLoading = false;
+  bool _hydrated = false;
   String? _error;
 
   List<Category> get categories => List.unmodifiable(_categories);
@@ -15,6 +16,15 @@ class CategoryProvider extends ChangeNotifier {
   String? get error => _error;
 
   Future<void> loadCategories() async {
+    if (!_hydrated) {
+      _hydrated = true;
+      final cached = await CategoryService.getCachedCategories();
+      if (_categories.isEmpty && cached.isNotEmpty) {
+        _categories = cached;
+        notifyListeners();
+      }
+    }
+
     _isLoading = true;
     _error = null;
     notifyListeners();
@@ -53,6 +63,12 @@ class CategoryProvider extends ChangeNotifier {
       notifyListeners();
       return null;
     }
+  }
+
+  void reset() {
+    _categories = [];
+    _hydrated = false;
+    notifyListeners();
   }
 
   String nameFor(int categoryId) {

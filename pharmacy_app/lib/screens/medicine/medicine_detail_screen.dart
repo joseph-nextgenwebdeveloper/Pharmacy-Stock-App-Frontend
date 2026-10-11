@@ -5,6 +5,7 @@ import '../../config/app_colors.dart';
 import '../../config/app_text_styles.dart';
 import '../../helpers/formatter.dart';
 import '../../models/batch.dart';
+import '../../widgets/medicine_image.dart';
 import '../../models/medicine.dart';
 import '../../providers/batch_provider.dart';
 import '../../providers/category_provider.dart';
@@ -53,7 +54,7 @@ class _MedicineDetailScreenState extends State<MedicineDetailScreen> {
               ),
               child: Container(
                 padding: const EdgeInsets.fromLTRB(22, 10, 22, 26),
-                decoration: const BoxDecoration(
+                decoration: BoxDecoration(
                   color: AppColors.surface,
                   borderRadius: BorderRadius.vertical(top: Radius.circular(26)),
                 ),
@@ -216,7 +217,7 @@ class _MedicineDetailScreenState extends State<MedicineDetailScreen> {
               ),
               child: Container(
                 padding: const EdgeInsets.fromLTRB(22, 10, 22, 26),
-                decoration: const BoxDecoration(
+                decoration: BoxDecoration(
                   color: AppColors.surface,
                   borderRadius: BorderRadius.vertical(top: Radius.circular(26)),
                 ),
@@ -391,23 +392,15 @@ class _MedicineDetailScreenState extends State<MedicineDetailScreen> {
                             dark: isOut || isLow,
                             onTap: () => Navigator.of(context).maybePop(),
                           ),
-                          if (medicine.imageUrl != null &&
-                              medicine.imageUrl!.isNotEmpty)
-                            Container(
-                              width: 44,
-                              height: 44,
-                              clipBehavior: Clip.antiAlias,
-                              decoration: BoxDecoration(
-                                color: Colors.black.withValues(alpha: 0.12),
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: Image.network(
-                                medicine.imageUrl!,
-                                fit: BoxFit.cover,
-                                errorBuilder: (context, error, stack) =>
-                                    const SizedBox.shrink(),
-                              ),
-                            ),
+                          MedicineImage(
+                            url: medicine.imageUrl,
+                            size: 64,
+                            radius: 16,
+                            background: Colors.black.withValues(alpha: 0.12),
+                            iconColor: isOut || isLow
+                                ? Colors.white
+                                : const Color(0xFF06170C),
+                          ),
                         ],
                       ),
                       const SizedBox(height: 18),
@@ -532,7 +525,7 @@ class _MedicineDetailScreenState extends State<MedicineDetailScreen> {
 
                           return Container(
                             padding: const EdgeInsets.symmetric(vertical: 10),
-                            decoration: const BoxDecoration(
+                            decoration: BoxDecoration(
                               border: Border(
                                 bottom: BorderSide(color: AppColors.border),
                               ),

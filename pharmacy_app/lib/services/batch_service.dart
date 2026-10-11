@@ -2,27 +2,24 @@ import 'package:dio/dio.dart';
 
 import '../models/batch.dart';
 import 'api_service.dart';
+import 'cache_service.dart';
 
 class BatchService {
   static const String _endpoint = '/inventory/batches/';
+  static const String cacheKey = 'batches';
+
+  static Future<List<Batch>> getCachedBatches() async {
+    final items = await CacheService.readList(cacheKey);
+    return items.map(Batch.fromJson).toList();
+  }
 
   static Future<List<Batch>> getBatches() async {
     try {
       final items = await ApiService.getAllPages(_endpoint);
+      await CacheService.write(cacheKey, items);
       return items.map(Batch.fromJson).toList();
     } on DioException catch (e) {
-      final data = e.response?.data;
-
-      if (data is Map<String, dynamic>) {
-        throw Exception(
-          data['detail'] ??
-              data.toString(),
-        );
-      }
-
-      throw Exception(
-        'Failed to load batches.',
-      );
+      throw ApiService.exceptionFor(e, 'Failed to load batches.');
     }
   }
 
@@ -38,18 +35,7 @@ class BatchService {
         response.data as Map<String, dynamic>,
       );
     } on DioException catch (e) {
-      final data = e.response?.data;
-
-      if (data is Map<String, dynamic>) {
-        throw Exception(
-          data['detail'] ??
-              data.toString(),
-        );
-      }
-
-      throw Exception(
-        'Failed to load batch.',
-      );
+      throw ApiService.exceptionFor(e, 'Failed to load batch.');
     }
   }
 
@@ -66,17 +52,7 @@ class BatchService {
         response.data as Map<String, dynamic>,
       );
     } on DioException catch (e) {
-      final data = e.response?.data;
-
-      if (data is Map<String, dynamic>) {
-        throw Exception(
-          data.toString(),
-        );
-      }
-
-      throw Exception(
-        'Failed to create batch.',
-      );
+      throw ApiService.exceptionFor(e, 'Failed to create batch.');
     }
   }
 
@@ -93,17 +69,7 @@ class BatchService {
         response.data as Map<String, dynamic>,
       );
     } on DioException catch (e) {
-      final data = e.response?.data;
-
-      if (data is Map<String, dynamic>) {
-        throw Exception(
-          data.toString(),
-        );
-      }
-
-      throw Exception(
-        'Failed to update batch.',
-      );
+      throw ApiService.exceptionFor(e, 'Failed to update batch.');
     }
   }
 
@@ -115,17 +81,7 @@ class BatchService {
         '$_endpoint$id/',
       );
     } on DioException catch (e) {
-      final data = e.response?.data;
-
-      if (data is Map<String, dynamic>) {
-        throw Exception(
-          data.toString(),
-        );
-      }
-
-      throw Exception(
-        'Failed to delete batch.',
-      );
+      throw ApiService.exceptionFor(e, 'Failed to delete batch.');
     }
   }
 }

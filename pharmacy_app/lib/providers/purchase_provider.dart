@@ -6,6 +6,7 @@ import '../services/goods_received_service.dart';
 class PurchaseProvider extends ChangeNotifier {
   List<GoodsReceived> _goodsReceived = [];
   bool _isLoading = false;
+  bool _hydrated = false;
   String? _error;
 
   List<GoodsReceived> get goodsReceived =>
@@ -15,6 +16,15 @@ class PurchaseProvider extends ChangeNotifier {
   String? get error => _error;
 
   Future<void> loadGoodsReceived() async {
+    if (!_hydrated) {
+      _hydrated = true;
+      final cached = await GoodsReceivedService.getCachedGoodsReceived();
+      if (_goodsReceived.isEmpty && cached.isNotEmpty) {
+        _goodsReceived = cached;
+        notifyListeners();
+      }
+    }
+
     _isLoading = true;
     _error = null;
     notifyListeners();
@@ -74,6 +84,12 @@ class PurchaseProvider extends ChangeNotifier {
 
   Future<void> refresh() async {
     await loadGoodsReceived();
+  }
+
+  void reset() {
+    _goodsReceived = [];
+    _hydrated = false;
+    notifyListeners();
   }
 
   void clearError() {

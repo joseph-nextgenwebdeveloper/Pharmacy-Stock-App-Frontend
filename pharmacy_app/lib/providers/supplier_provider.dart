@@ -6,6 +6,7 @@ import '../services/supplier_service.dart';
 class SupplierProvider extends ChangeNotifier {
   List<Supplier> _suppliers = [];
   bool _isLoading = false;
+  bool _hydrated = false;
   String? _error;
 
   List<Supplier> get suppliers => List.unmodifiable(_suppliers);
@@ -13,6 +14,15 @@ class SupplierProvider extends ChangeNotifier {
   String? get error => _error;
 
   Future<void> loadSuppliers() async {
+    if (!_hydrated) {
+      _hydrated = true;
+      final cached = await SupplierService.getCachedSuppliers();
+      if (_suppliers.isEmpty && cached.isNotEmpty) {
+        _suppliers = cached;
+        notifyListeners();
+      }
+    }
+
     _isLoading = true;
     _error = null;
     notifyListeners();
@@ -76,6 +86,12 @@ class SupplierProvider extends ChangeNotifier {
       _isLoading = false;
       notifyListeners();
     }
+  }
+
+  void reset() {
+    _suppliers = [];
+    _hydrated = false;
+    notifyListeners();
   }
 
   void clearError() {

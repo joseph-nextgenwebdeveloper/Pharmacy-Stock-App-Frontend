@@ -1,3 +1,5 @@
+import 'medicine.dart';
+
 class User {
   final int id;
   final String username;
@@ -7,6 +9,9 @@ class User {
   final String phoneNumber;
   final String role;
 
+  /// Profile photo URL (null = show the initials badge).
+  final String? avatarUrl;
+
   const User({
     required this.id,
     required this.username,
@@ -15,6 +20,7 @@ class User {
     required this.lastName,
     required this.phoneNumber,
     required this.role,
+    this.avatarUrl,
   });
 
   factory User.fromJson(
@@ -28,6 +34,7 @@ class User {
       lastName: json['last_name'] ?? '',
       phoneNumber: json['phone_number'] ?? '',
       role: json['role'] ?? '',
+      avatarUrl: Medicine.resolveImageUrl(json['avatar'] as String?),
     );
   }
 
@@ -40,10 +47,40 @@ class User {
       'last_name': lastName,
       'phone_number': phoneNumber,
       'role': role,
+      'avatar': avatarUrl,
     };
   }
 
   String get fullName {
     return '$firstName $lastName'.trim();
+  }
+
+  /// Name to show people: full name, else username.
+  String get displayName => fullName.isNotEmpty ? fullName : username;
+
+  String get initials {
+    final first = firstName.trim();
+    final last = lastName.trim();
+
+    if (first.isNotEmpty && last.isNotEmpty) {
+      return '${first[0]}${last[0]}'.toUpperCase();
+    }
+    if (first.isNotEmpty) return first[0].toUpperCase();
+    if (username.isNotEmpty) return username[0].toUpperCase();
+    return '?';
+  }
+
+  String get prettyRole => prettyRoleName(role);
+
+  /// Admins and store managers may look at everyone's activity.
+  bool get canViewTeamActivity => role == 'ADMIN' || role == 'STORE_MANAGER';
+
+  static String prettyRoleName(String? role) {
+    if (role == null || role.isEmpty) return 'Stock Clerk';
+
+    return role
+        .split('_')
+        .map((w) => w.isEmpty ? w : '${w[0]}${w.substring(1).toLowerCase()}')
+        .join(' ');
   }
 }

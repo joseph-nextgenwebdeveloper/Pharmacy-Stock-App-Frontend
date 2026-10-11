@@ -2,17 +2,23 @@ import 'package:dio/dio.dart';
 
 import '../models/category.dart';
 import 'api_service.dart';
+import 'cache_service.dart';
 
 class CategoryService {
+  static const String cacheKey = 'categories';
+
+  static Future<List<Category>> getCachedCategories() async {
+    final items = await CacheService.readList(cacheKey);
+    return items.map(Category.fromJson).toList();
+  }
+
   static Future<List<Category>> getCategories() async {
     try {
       final items = await ApiService.getAllPages('/inventory/categories/');
+      await CacheService.write(cacheKey, items);
       return items.map(Category.fromJson).toList();
     } on DioException catch (e) {
-      throw Exception(
-        e.response?.data?['detail'] ??
-            'Failed to load categories.',
-      );
+      throw ApiService.exceptionFor(e, 'Failed to load categories.');
     }
   }
 
@@ -24,10 +30,7 @@ class CategoryService {
 
       return Category.fromJson(response.data);
     } on DioException catch (e) {
-      throw Exception(
-        e.response?.data?['detail'] ??
-            'Failed to load category.',
-      );
+      throw ApiService.exceptionFor(e, 'Failed to load category.');
     }
   }
 
@@ -46,13 +49,7 @@ class CategoryService {
 
       return Category.fromJson(response.data as Map<String, dynamic>);
     } on DioException catch (e) {
-      final data = e.response?.data;
-
-      if (data is Map<String, dynamic>) {
-        throw Exception(data.toString());
-      }
-
-      throw Exception('Failed to create category.');
+      throw ApiService.exceptionFor(e, 'Failed to create category.');
     }
   }
 }

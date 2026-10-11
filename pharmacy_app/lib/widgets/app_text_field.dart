@@ -1,3 +1,4 @@
+import '../config/app_colors.dart';
 import 'package:flutter/material.dart';
 
 class AppTextField extends StatelessWidget {
@@ -29,7 +30,7 @@ class AppTextField extends StatelessWidget {
         hintText: hintText,
         prefixIcon: Icon(prefixIcon),
         filled: true,
-        fillColor: const Color(0xFFF5F5F5),
+        fillColor: AppColors.surface,
 
         contentPadding: const EdgeInsets.symmetric(
           horizontal: 20,

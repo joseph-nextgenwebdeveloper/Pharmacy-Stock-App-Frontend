@@ -2,53 +2,24 @@ import 'package:dio/dio.dart';
 
 import '../models/supplier.dart';
 import 'api_service.dart';
+import 'cache_service.dart';
 
 class SupplierService {
   static const String _endpoint = '/suppliers/';
+  static const String cacheKey = 'suppliers';
+
+  static Future<List<Supplier>> getCachedSuppliers() async {
+    final items = await CacheService.readList(cacheKey);
+    return items.map(Supplier.fromJson).toList();
+  }
 
   static Future<List<Supplier>> getSuppliers() async {
     try {
-      final response = await ApiService.dio.get(
-        _endpoint,
-      );
-
-      final data = response.data;
-
-      if (data is List) {
-        return data
-            .map(
-              (json) => Supplier.fromJson(
-                json as Map<String, dynamic>,
-              ),
-            )
-            .toList();
-      }
-
-      if (data is Map<String, dynamic> &&
-          data['results'] is List) {
-        return (data['results'] as List)
-            .map(
-              (json) => Supplier.fromJson(
-                json as Map<String, dynamic>,
-              ),
-            )
-            .toList();
-      }
-
-      return [];
+      final items = await ApiService.getAllPages(_endpoint);
+      await CacheService.write(cacheKey, items);
+      return items.map(Supplier.fromJson).toList();
     } on DioException catch (e) {
-      final data = e.response?.data;
-
-      if (data is Map<String, dynamic>) {
-        throw Exception(
-          data['detail'] ??
-              data.toString(),
-        );
-      }
-
-      throw Exception(
-        'Failed to load suppliers.',
-      );
+      throw ApiService.exceptionFor(e, 'Failed to load suppliers.');
     }
   }
 
@@ -64,18 +35,7 @@ class SupplierService {
         response.data as Map<String, dynamic>,
       );
     } on DioException catch (e) {
-      final data = e.response?.data;
-
-      if (data is Map<String, dynamic>) {
-        throw Exception(
-          data['detail'] ??
-              data.toString(),
-        );
-      }
-
-      throw Exception(
-        'Failed to load supplier.',
-      );
+      throw ApiService.exceptionFor(e, 'Failed to load supplier.');
     }
   }
 
@@ -92,17 +52,7 @@ class SupplierService {
         response.data as Map<String, dynamic>,
       );
     } on DioException catch (e) {
-      final data = e.response?.data;
-
-      if (data is Map<String, dynamic>) {
-        throw Exception(
-          data.toString(),
-        );
-      }
-
-      throw Exception(
-        'Failed to create supplier.',
-      );
+      throw ApiService.exceptionFor(e, 'Failed to create supplier.');
     }
   }
 
@@ -119,17 +69,7 @@ class SupplierService {
         response.data as Map<String, dynamic>,
       );
     } on DioException catch (e) {
-      final data = e.response?.data;
-
-      if (data is Map<String, dynamic>) {
-        throw Exception(
-          data.toString(),
-        );
-      }
-
-      throw Exception(
-        'Failed to update supplier.',
-      );
+      throw ApiService.exceptionFor(e, 'Failed to update supplier.');
     }
   }
 }

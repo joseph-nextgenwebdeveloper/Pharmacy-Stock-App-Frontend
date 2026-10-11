@@ -1,17 +1,20 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 
 import '../../config/app_colors.dart';
 import '../../config/app_text_styles.dart';
+import '../../helpers/barcode_parser.dart';
 import '../../helpers/formatter.dart';
 import '../../models/batch.dart';
 import '../../models/medicine.dart';
 import '../../providers/batch_provider.dart';
 import '../../providers/category_provider.dart';
 import '../../providers/inventory_provider.dart';
+import '../../routes/route_names.dart';
 
 /// Add-medicine flow. A medicine's "quantity" on this backend is always
 /// the sum of its batches' quantities (there's no separate stock number
@@ -20,7 +23,11 @@ import '../../providers/inventory_provider.dart';
 /// in stock" field meaningful, and keeps the "every medicine has at
 /// least one batch" rule true from the moment it's created.
 class AddMedicineScreen extends StatefulWidget {
-  const AddMedicineScreen({super.key});
+  /// Pre-fills the barcode field (e.g. when arriving from a scan that
+  /// matched no medicine).
+  final String? initialBarcode;
+
+  const AddMedicineScreen({super.key, this.initialBarcode});
 
   @override
   State<AddMedicineScreen> createState() => _AddMedicineScreenState();
@@ -34,6 +41,7 @@ class _AddMedicineScreenState extends State<AddMedicineScreen> {
   final _genericNameController = TextEditingController();
   final _descriptionController = TextEditingController();
   final _skuController = TextEditingController();
+  final _barcodeController = TextEditingController();
   final _unitsController = TextEditingController(text: 'Box');
   final _reorderController = TextEditingController(text: '20');
 
@@ -52,6 +60,10 @@ class _AddMedicineScreenState extends State<AddMedicineScreen> {
   void initState() {
     super.initState();
 
+    if (widget.initialBarcode != null) {
+      _barcodeController.text = widget.initialBarcode!;
+    }
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<CategoryProvider>().loadCategories();
     });
@@ -63,6 +75,7 @@ class _AddMedicineScreenState extends State<AddMedicineScreen> {
     _genericNameController.dispose();
     _descriptionController.dispose();
     _skuController.dispose();
+    _barcodeController.dispose();
     _unitsController.dispose();
     _reorderController.dispose();
     _batchNumberController.dispose();
@@ -167,11 +180,6 @@ class _AddMedicineScreenState extends State<AddMedicineScreen> {
       return;
     }
 
-    if (_batchNumberController.text.trim().isEmpty) {
-      setState(() => _error = 'Give the first batch a batch number.');
-      return;
-    }
-
     setState(() {
       _isSaving = true;
       _error = null;
@@ -185,6 +193,9 @@ class _AddMedicineScreenState extends State<AddMedicineScreen> {
       quantity: 0,
       categoryId: _categoryId!,
       sku: _skuController.text.trim(),
+      barcode: _barcodeController.text.trim().isEmpty
+          ? null
+          : _barcodeController.text.trim(),
       units: _unitsController.text.trim(),
       reorderLevel: int.tryParse(_reorderController.text.trim()) ?? 0,
     );
@@ -205,7 +216,22 @@ class _AddMedicineScreenState extends State<AddMedicineScreen> {
       return;
     }
 
-    // Medicine saved — now create its first batch, which is what actually
+    // Opening stock is optional. Without a batch number the medicine is
+    // simply registered; stock is added later via Create batch.
+    if (_batchNumberController.text.trim().isEmpty) {
+      setState(() => _isSaving = false);
+      Navigator.of(context).pop();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '${createdMedicine.name} registered. Add stock from Batches > Create batch.',
+          ),
+        ),
+      );
+      return;
+    }
+
+    // Medicine saved — now create its opening batch, which is what actually
     // gives it the "number in stock" the person entered.
     final now = DateTime.now();
 
@@ -328,9 +354,29 @@ class _AddMedicineScreenState extends State<AddMedicineScreen> {
               const SizedBox(height: 14),
               TextFormField(
                 controller: _skuController,
-                decoration: const InputDecoration(labelText: 'SKU'),
+                decoration:
+                    const InputDecoration(labelText: 'SKU (your internal code)'),
                 validator: (v) =>
                     (v == null || v.trim().isEmpty) ? 'Required' : null,
+              ),
+              const SizedBox(height: 14),
+              TextFormField(
+                controller: _barcodeController,
+                decoration: InputDecoration(
+                  labelText: 'Manufacturer barcode / GTIN (optional)',
+                  suffixIcon: IconButton(
+                    tooltip: 'Scan barcode',
+                    icon: const Icon(Icons.qr_code_scanner_rounded),
+                    onPressed: () async {
+                      final code = await context
+                          .push<String>('${RouteNames.scanner}?pick=1');
+                      if (code != null && mounted) {
+                        setState(() => _barcodeController.text =
+                            BarcodeParser.parse(code).gtin ?? code);
+                      }
+                    },
+                  ),
+                ),
               ),
               const SizedBox(height: 14),
               Row(
@@ -382,11 +428,12 @@ class _AddMedicineScreenState extends State<AddMedicineScreen> {
               const SizedBox(height: 28),
               Container(height: 1, color: AppColors.border),
               const SizedBox(height: 20),
-              Text('First batch', style: AppTextStyles.headingSmall),
+              Text('Opening stock (optional)', style: AppTextStyles.headingSmall),
               const SizedBox(height: 4),
               Text(
-                'Every medicine needs at least one batch — this is also '
-                'where "number in stock" comes from.',
+                'Leave the batch number empty to register the medicine '
+                'without stock. You can receive stock later from '
+                'Batches > Create batch.',
                 style: AppTextStyles.bodySmall,
               ),
               const SizedBox(height: 12),

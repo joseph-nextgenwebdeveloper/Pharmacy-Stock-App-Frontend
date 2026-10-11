@@ -1,3 +1,23 @@
+class DayMovement {
+  final String date;
+  final int unitsIn;
+  final int unitsOut;
+
+  const DayMovement({
+    required this.date,
+    required this.unitsIn,
+    required this.unitsOut,
+  });
+
+  factory DayMovement.fromJson(Map<String, dynamic> json) {
+    return DayMovement(
+      date: json['date'] ?? '',
+      unitsIn: json['units_in'] ?? 0,
+      unitsOut: json['units_out'] ?? 0,
+    );
+  }
+}
+
 class Dashboard {
   final int totalMedicines;
   final int totalStock;
@@ -8,6 +28,10 @@ class Dashboard {
   final int todayDispensed;
   final int todaySales;
   final int unreadNotifications;
+  final int expiredBatches;
+  final int expiringBatches;
+  final int myUpdatesToday;
+  final List<DayMovement> weeklyMovements;
 
   const Dashboard({
     required this.totalMedicines,
@@ -19,11 +43,17 @@ class Dashboard {
     required this.todayDispensed,
     required this.todaySales,
     required this.unreadNotifications,
+    this.expiredBatches = 0,
+    this.expiringBatches = 0,
+    this.myUpdatesToday = 0,
+    this.weeklyMovements = const [],
   });
 
   factory Dashboard.fromJson(
     Map<String, dynamic> json,
   ) {
+    final weekly = json['weekly_movements'];
+
     return Dashboard(
       totalMedicines: json['total_medicines'] ?? 0,
       totalStock: json['total_stock'] ?? 0,
@@ -33,8 +63,16 @@ class Dashboard {
       todayReceived: json['today_received'] ?? 0,
       todayDispensed: json['today_dispensed'] ?? 0,
       todaySales: json['today_sales'] ?? 0,
-      unreadNotifications:
-          json['unread_notifications'] ?? 0,
+      unreadNotifications: json['unread_notifications'] ?? 0,
+      expiredBatches: json['expired_batches'] ?? 0,
+      expiringBatches: json['expiring_batches'] ?? 0,
+      myUpdatesToday: json['my_updates_today'] ?? 0,
+      weeklyMovements: weekly is List
+          ? weekly
+              .whereType<Map>()
+              .map((m) => DayMovement.fromJson(Map<String, dynamic>.from(m)))
+              .toList()
+          : const [],
     );
   }
 }

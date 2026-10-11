@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import '../../config/app_sizes.dart';
@@ -9,7 +10,14 @@ import '../../models/inventory_report.dart';
 import '../../models/monthly_movement_report.dart';
 import '../../models/slow_moving_medicine.dart';
 import '../../models/stock_valuation_report.dart';
+import '../../helpers/print_helpers.dart';
+import '../../models/batch.dart';
+import '../../models/stock_movement.dart';
+import '../../providers/batch_provider.dart';
+import '../../providers/inventory_provider.dart';
 import '../../providers/report_provider.dart';
+import '../../providers/stock_movement_provider.dart';
+import '../../services/report_printer.dart';
 import '../../widgets/error_widget.dart';
 import '../../widgets/loading_widget.dart';
 
@@ -23,6 +31,7 @@ class ReportsScreen extends StatefulWidget {
 
 class _ReportsScreenState extends State<ReportsScreen> {
   String? _selectedReport;
+  DateTime _reportDay = DateTime.now();
 
   final int _currentYear = DateTime.now().year;
   final int _currentMonth = DateTime.now().month;
@@ -151,6 +160,35 @@ class _ReportsScreenState extends State<ReportsScreen> {
                 .loadSlowMovingMedicines();
           },
         ),
+        _ReportCard(
+          title: 'Batch Register',
+          description:
+              'Every batch with supplier, prices, quantities and expiry.',
+          icon: Icons.inventory_outlined,
+          onTap: () {
+            setState(() {
+              _selectedReport = 'batches';
+            });
+
+            context.read<BatchProvider>().loadBatches();
+            context.read<InventoryProvider>().loadMedicines();
+          },
+        ),
+        _ReportCard(
+          title: 'Daily Activity',
+          description:
+              'Everything received and dispensed on a chosen day.',
+          icon: Icons.today_outlined,
+          onTap: () {
+            setState(() {
+              _selectedReport = 'daily';
+              _reportDay = DateTime.now();
+            });
+
+            context.read<StockMovementProvider>().loadMovements();
+            context.read<InventoryProvider>().loadMedicines();
+          },
+        ),
       ],
     );
   }
@@ -196,6 +234,11 @@ class _ReportsScreenState extends State<ReportsScreen> {
                   _reportTitle(),
                   style: AppTextStyles.headingMedium,
                 ),
+              ),
+              IconButton(
+                tooltip: 'Print / save as PDF',
+                onPressed: () => _printSelected(context, provider),
+                icon: const Icon(Icons.print_outlined),
               ),
               IconButton(
                 onPressed: () {
@@ -245,6 +288,15 @@ class _ReportsScreenState extends State<ReportsScreen> {
           reports: provider.slowMovingMedicines,
         );
 
+      case 'batches':
+        return const _BatchRegisterView();
+
+      case 'daily':
+        return _DailyActivityView(
+          day: _reportDay,
+          onPickDay: (d) => setState(() => _reportDay = d),
+        );
+
       default:
         return const SizedBox.shrink();
     }
@@ -264,6 +316,10 @@ class _ReportsScreenState extends State<ReportsScreen> {
         return 'Fast-Moving Medicines';
       case 'slow':
         return 'Slow-Moving Medicines';
+      case 'batches':
+        return 'Batch Register';
+      case 'daily':
+        return 'Daily Activity';
       default:
         return 'Reports';
     }
@@ -294,6 +350,76 @@ class _ReportsScreenState extends State<ReportsScreen> {
       case 'slow':
         provider.loadSlowMovingMedicines();
         break;
+      case 'batches':
+        context.read<BatchProvider>().loadBatches();
+        break;
+      case 'daily':
+        context.read<StockMovementProvider>().loadMovements();
+        break;
+    }
+  }
+
+  Future<void> _printSelected(
+    BuildContext context,
+    ReportProvider provider,
+  ) async {
+    final prepared = preparedByName(context);
+    final messenger = ScaffoldMessenger.of(context);
+
+    try {
+      switch (_selectedReport) {
+        case 'inventory':
+          await ReportPrinter.inventory(provider.inventoryReport,
+              preparedBy: prepared);
+          break;
+        case 'valuation':
+          await ReportPrinter.valuation(provider.stockValuationReport,
+              preparedBy: prepared);
+          break;
+        case 'expired':
+          await ReportPrinter.expired(provider.expiredMedicineReport,
+              preparedBy: prepared);
+          break;
+        case 'monthly':
+          await ReportPrinter.monthly(provider.monthlyMovementReport,
+              preparedBy: prepared);
+          break;
+        case 'fast':
+          await ReportPrinter.fastMoving(provider.fastMovingMedicines,
+              preparedBy: prepared);
+          break;
+        case 'slow':
+          await ReportPrinter.slowMoving(provider.slowMovingMedicines,
+              preparedBy: prepared);
+          break;
+        case 'batches':
+          final medicines = context.read<InventoryProvider>().medicines;
+          await ReportPrinter.batchRegister(
+            context.read<BatchProvider>().batches,
+            preparedBy: prepared,
+            medicineName: (b) {
+              if (b.medicineName.isNotEmpty) return b.medicineName;
+              for (final m in medicines) {
+                if (m.id == b.medicineId) return m.name;
+              }
+              return 'Medicine #${b.medicineId}';
+            },
+          );
+          break;
+        case 'daily':
+          final all = context.read<StockMovementProvider>().movements;
+          final day = DateTime(_reportDay.year, _reportDay.month, _reportDay.day);
+          await printDayReport(
+            context,
+            day,
+            all.where((m) => m.day == day).toList(),
+          );
+          break;
+      }
+    } catch (e) {
+      messenger.showSnackBar(
+        SnackBar(content: Text('Could not open the print dialog: $e')),
+      );
     }
   }
 }
@@ -693,6 +819,147 @@ class _EmptyReport extends StatelessWidget {
           style: AppTextStyles.bodyMedium,
         ),
       ),
+    );
+  }
+}
+
+/// On-screen preview of the Batch Register report.
+class _BatchRegisterView extends StatelessWidget {
+  const _BatchRegisterView();
+
+  @override
+  Widget build(BuildContext context) {
+    return Consumer2<BatchProvider, InventoryProvider>(
+      builder: (context, batchProvider, inventory, child) {
+        if (batchProvider.isLoading && batchProvider.batches.isEmpty) {
+          return const LoadingWidget();
+        }
+
+        final batches = [...batchProvider.batches]
+          ..sort((a, b) => a.expiryDate.compareTo(b.expiryDate));
+
+        if (batches.isEmpty) {
+          return const _EmptyReport(message: 'No batches recorded yet.');
+        }
+
+        String nameOf(Batch b) {
+          if (b.medicineName.isNotEmpty) return b.medicineName;
+          for (final m in inventory.medicines) {
+            if (m.id == b.medicineId) return m.name;
+          }
+          return 'Medicine #${b.medicineId}';
+        }
+
+        return ListView.builder(
+          padding: const EdgeInsets.all(AppSizes.paddingMedium),
+          itemCount: batches.length,
+          itemBuilder: (context, i) {
+            final b = batches[i];
+
+            return Card(
+              margin: const EdgeInsets.only(bottom: AppSizes.spacingSmall),
+              child: ListTile(
+                title: Text(nameOf(b), style: AppTextStyles.headingSmall),
+                subtitle: Text(
+                  'Batch ${b.batchNumber}  |  exp ${b.expiryDate}\n'
+                  '${b.supplierName.isEmpty ? 'No supplier' : b.supplierName}  |  '
+                  '${b.quantity}/${b.originalQuantity > 0 ? b.originalQuantity : b.quantity} left',
+                  style: AppTextStyles.bodySmall,
+                ),
+                isThreeLine: true,
+                trailing: Text(b.statusLabel, style: AppTextStyles.label),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+}
+
+/// On-screen preview of the Daily Activity report, with a day picker.
+class _DailyActivityView extends StatelessWidget {
+  final DateTime day;
+  final ValueChanged<DateTime> onPickDay;
+
+  const _DailyActivityView({required this.day, required this.onPickDay});
+
+  @override
+  Widget build(BuildContext context) {
+    return Consumer2<StockMovementProvider, InventoryProvider>(
+      builder: (context, provider, inventory, child) {
+        final d = DateTime(day.year, day.month, day.day);
+        final moves = provider.movements.where((m) => m.day == d).toList()
+          ..sort((a, b) {
+            final wa = a.when, wb = b.when;
+            if (wa == null || wb == null) return 0;
+            return wa.compareTo(wb);
+          });
+
+        String nameOf(StockMovement m) {
+          if (m.medicineName.isNotEmpty) return m.medicineName;
+          for (final med in inventory.medicines) {
+            if (med.id == m.medicineId) return med.name;
+          }
+          return 'Medicine #${m.medicineId}';
+        }
+
+        final inQty =
+            moves.where((m) => m.isIn).fold<int>(0, (s, m) => s + m.quantity);
+        final outQty =
+            moves.where((m) => !m.isIn).fold<int>(0, (s, m) => s + m.quantity);
+
+        return ListView(
+          padding: const EdgeInsets.all(AppSizes.paddingMedium),
+          children: [
+            OutlinedButton.icon(
+              onPressed: () async {
+                final picked = await showDatePicker(
+                  context: context,
+                  initialDate: d,
+                  firstDate: DateTime(2020),
+                  lastDate: DateTime.now(),
+                );
+                if (picked != null) onPickDay(picked);
+              },
+              icon: const Icon(Icons.calendar_today_outlined, size: 18),
+              label: Text(DateFormat('EEEE, d MMMM y').format(d)),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              '${moves.length} movements  |  received $inQty  |  dispensed $outQty',
+              style: AppTextStyles.bodySmall,
+            ),
+            const SizedBox(height: 12),
+            if (moves.isEmpty)
+              const _EmptyReport(message: 'No movements on this day.')
+            else
+              ...moves.map(
+                (m) => Card(
+                  margin: const EdgeInsets.only(bottom: AppSizes.spacingSmall),
+                  child: ListTile(
+                    leading: CircleAvatar(
+                      child: Icon(m.isIn
+                          ? Icons.south_west_rounded
+                          : Icons.north_east_rounded),
+                    ),
+                    title: Text(nameOf(m), style: AppTextStyles.headingSmall),
+                    subtitle: Text(
+                      '${m.when == null ? '' : DateFormat('HH:mm').format(m.when!)}'
+                      '${m.batchNumber.isEmpty ? '' : '  |  batch ${m.batchNumber}'}'
+                      '${m.performedByName.isEmpty ? '' : '  |  ${m.performedByName}'}',
+                      style: AppTextStyles.bodySmall,
+                    ),
+                    trailing: Text(
+                      '${m.isIn ? '+' : '-'}${m.quantity}',
+                      style: AppTextStyles.headingSmall,
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        );
+      },
     );
   }
 }

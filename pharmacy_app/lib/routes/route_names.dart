@@ -6,6 +6,7 @@ class RouteNames {
   static const inventory = '/inventory';
   static const addMedicine = '/inventory/add';
   static const batches = '/inventory/batches';
+  static const createBatch = '/inventory/batches/new';
   static const medicine = '/medicine';
   static const purchases = '/purchases';
   static const sales = '/sales';
@@ -15,7 +16,10 @@ class RouteNames {
   static const alerts = '/alerts';
   static const profile = '/profile';
   static const movementHistory = '/movement-history';
+  static const activity = '/activity';
   static const more = '/more';
+  static String batchDetail(int id) => '$batches/$id';
+
   static String medicineDetail(int id) {
     return '$medicine/$id';
   }

@@ -6,6 +6,7 @@ import '../services/sales_service.dart';
 class SalesProvider extends ChangeNotifier {
   List<Sale> _sales = [];
   bool _isLoading = false;
+  bool _hydrated = false;
   String? _error;
 
   List<Sale> get sales => List.unmodifiable(_sales);
@@ -13,6 +14,15 @@ class SalesProvider extends ChangeNotifier {
   String? get error => _error;
 
   Future<void> loadSales() async {
+    if (!_hydrated) {
+      _hydrated = true;
+      final cached = await SaleService.getCachedSales();
+      if (_sales.isEmpty && cached.isNotEmpty) {
+        _sales = cached;
+        notifyListeners();
+      }
+    }
+
     _isLoading = true;
     _error = null;
     notifyListeners();
@@ -47,6 +57,12 @@ class SalesProvider extends ChangeNotifier {
       _isLoading = false;
       notifyListeners();
     }
+  }
+
+  void reset() {
+    _sales = [];
+    _hydrated = false;
+    notifyListeners();
   }
 
   void clearError() {

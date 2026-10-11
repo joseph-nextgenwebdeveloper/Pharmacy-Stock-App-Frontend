@@ -1,15 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 
 import '../../config/app_colors.dart';
 import '../../config/app_text_styles.dart';
-import '../../models/user.dart';
+import '../../helpers/session_helper.dart';
+import '../../providers/activity_provider.dart';
 import '../../providers/auth_provider.dart';
-import '../../providers/inventory_provider.dart';
-import '../../providers/stock_movement_provider.dart';
+import '../../providers/theme_provider.dart';
 import '../../routes/route_names.dart';
+import '../../services/stock_alert_service.dart';
+import '../../widgets/activity_tile.dart';
+import '../../widgets/user_avatar.dart';
 
+/// The signed-in person: photo, today's numbers, recent activity, settings
+/// (dark mode, stock-alert notifications) and sign out.
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
 
@@ -18,256 +24,429 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
+  bool _alertsOn = true;
+
   @override
   void initState() {
     super.initState();
-
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<StockMovementProvider>().loadMovements();
+      context.read<ActivityProvider>().loadMine();
+      context.read<AuthProvider>().refreshProfile();
+    });
+    StockAlertService.isEnabled().then((v) {
+      if (mounted) setState(() => _alertsOn = v);
     });
   }
 
-  bool _isToday(String isoDate) {
-    final parsed = DateTime.tryParse(isoDate);
-    if (parsed == null) return false;
-    final now = DateTime.now();
-    return parsed.year == now.year &&
-        parsed.month == now.month &&
-        parsed.day == now.day;
+  // ---------------------------------------------------------------- photo
+
+  Future<void> _changePhoto() async {
+    final user = context.read<AuthProvider>().user;
+
+    final choice = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.photo_camera_rounded),
+              title: const Text('Take a photo'),
+              onTap: () => Navigator.pop(sheetContext, 'camera'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library_rounded),
+              title: const Text('Choose from gallery'),
+              onTap: () => Navigator.pop(sheetContext, 'gallery'),
+            ),
+            if (user?.avatarUrl != null)
+              ListTile(
+                leading: const Icon(Icons.delete_outline_rounded, color: AppColors.error),
+                title: const Text('Remove photo'),
+                onTap: () => Navigator.pop(sheetContext, 'remove'),
+              ),
+          ],
+        ),
+      ),
+    );
+    if (choice == null || !mounted) return;
+
+    final auth = context.read<AuthProvider>();
+    bool ok;
+
+    if (choice == 'remove') {
+      ok = await auth.updateProfile(removeAvatar: true);
+    } else {
+      final picked = await ImagePicker().pickImage(
+        source: choice == 'camera' ? ImageSource.camera : ImageSource.gallery,
+        maxWidth: 900,
+        imageQuality: 85,
+      );
+      if (picked == null || !mounted) return;
+      ok = await auth.updateProfile(avatarPath: picked.path);
+    }
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(ok ? 'Profile photo updated.' : (auth.error ?? 'Could not update the photo.')),
+      ),
+    );
   }
+
+  Future<void> _editDetails() async {
+    final user = context.read<AuthProvider>().user;
+    if (user == null) return;
+
+    final first = TextEditingController(text: user.firstName);
+    final last = TextEditingController(text: user.lastName);
+    final phone = TextEditingController(text: user.phoneNumber);
+
+    final save = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (sheetContext) => Padding(
+        padding: EdgeInsets.fromLTRB(
+          20, 0, 20, MediaQuery.of(sheetContext).viewInsets.bottom + 20,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Edit profile', style: AppTextStyles.headingSmall),
+            const SizedBox(height: 14),
+            TextField(
+              controller: first,
+              textCapitalization: TextCapitalization.words,
+              decoration: const InputDecoration(labelText: 'First name'),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: last,
+              textCapitalization: TextCapitalization.words,
+              decoration: const InputDecoration(labelText: 'Last name'),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: phone,
+              keyboardType: TextInputType.phone,
+              decoration: const InputDecoration(labelText: 'Phone number'),
+            ),
+            const SizedBox(height: 16),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(sheetContext, true),
+              child: const Text('Save'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (save != true || !mounted) return;
+
+    final auth = context.read<AuthProvider>();
+    final ok = await auth.updateProfile(
+      firstName: first.text.trim(),
+      lastName: last.text.trim(),
+      phoneNumber: phone.text.trim(),
+    );
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(ok ? 'Profile saved.' : (auth.error ?? 'Could not save your profile.')),
+      ),
+    );
+  }
+
+  // ------------------------------------------------------------------ UI
 
   @override
   Widget build(BuildContext context) {
-    final user = context.watch<AuthProvider>().user;
-    final allMovements = context.watch<StockMovementProvider>().movements;
-    final inventory = context.watch<InventoryProvider>();
+    final auth = context.watch<AuthProvider>();
+    final user = auth.user;
+    final activity = context.watch<ActivityProvider>();
+    final theme = context.watch<ThemeProvider>();
+    final summary = activity.summary;
 
-    // "My activity" — scoped to this user, today, matching the design.
-    final myMovementsToday = allMovements.where((m) {
-      final isMine = user == null || m.performedById == null
-          ? true // backend may not always echo performed_by back; don't hide everything if so
-          : m.performedById == user.id;
-      final today = m.movementDate.isNotEmpty
-          ? _isToday(m.movementDate)
-          : _isToday(m.date);
-      return isMine && today;
-    }).toList();
+    final recent = activity.mine.where((a) => !a.isSession).take(6).toList();
 
-    final updatesToday = myMovementsToday.length;
-    final netUnitsToday = myMovementsToday.fold<int>(0, (sum, m) {
-      final isIn = m.movementType.toUpperCase() == 'IN';
-      return sum + (isIn ? m.quantity : -m.quantity);
-    });
+    String signed(int n) => '${n >= 0 ? '+' : ''}$n';
 
     return SafeArea(
       bottom: false,
-      child: ListView(
-        padding: const EdgeInsets.fromLTRB(20, 12, 20, 110),
-        children: [
-          Text('My activity', style: AppTextStyles.headingLarge),
-          const SizedBox(height: 18),
-          Row(
-            children: [
-              CircleAvatar(
-                radius: 27,
-                backgroundColor: AppColors.primary,
-                child: Text(
-                  _initials(user),
-                  style: const TextStyle(
-                    color: Color(0xFF06170C),
-                    fontWeight: FontWeight.w800,
-                    fontSize: 18,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      _fullName(user),
-                      style: AppTextStyles.headingSmall,
-                    ),
-                    Text(
-                      _prettyRole(user?.role),
-                      style: AppTextStyles.bodySmall,
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-
-          const SizedBox(height: 18),
-          Row(
-            children: [
-              Expanded(
-                child: _StatBox(value: '$updatesToday', label: 'Updates today'),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: _StatBox(
-                  value: '${netUnitsToday >= 0 ? '+' : ''}$netUnitsToday',
-                  label: 'Net units today',
-                  color: netUnitsToday >= 0 ? AppColors.primaryDeep : AppColors.error,
-                ),
-              ),
-            ],
-          ),
-
-          const SizedBox(height: 22),
-          Text('Account', style: AppTextStyles.headingSmall),
-          const SizedBox(height: 10),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 4),
-            decoration: BoxDecoration(
-              color: AppColors.surface,
-              border: Border.all(color: AppColors.border),
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: Column(
+      child: RefreshIndicator(
+        onRefresh: () async {
+          await activity.loadMine();
+          await auth.refreshProfile();
+        },
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 110),
+          children: [
+            Text('My activity', style: AppTextStyles.headingLarge),
+            const SizedBox(height: 18),
+            Row(
               children: [
-                _InfoRow(
-                  icon: Icons.badge_outlined,
-                  label: 'Username',
-                  value: user?.username.isNotEmpty == true ? user!.username : '—',
-                ),
-                _InfoRow(
-                  icon: Icons.mail_outline_rounded,
-                  label: 'Email',
-                  value: user?.email.isNotEmpty == true ? user!.email : '—',
-                ),
-                _InfoRow(
-                  icon: Icons.phone_outlined,
-                  label: 'Phone',
-                  value: user?.phoneNumber.isNotEmpty == true
-                      ? user!.phoneNumber
-                      : '—',
-                ),
-                _InfoRow(
-                  icon: Icons.verified_user_outlined,
-                  label: 'Role',
-                  value: _prettyRole(user?.role),
-                  isLast: true,
-                ),
-              ],
-            ),
-          ),
-
-          const SizedBox(height: 22),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text('Today', style: AppTextStyles.headingSmall),
-              if (updatesToday > 0)
-                Text('$updatesToday entries', style: AppTextStyles.bodySmall),
-            ],
-          ),
-          const SizedBox(height: 8),
-          if (myMovementsToday.isEmpty)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 16),
-              child: Text(
-                'No activity recorded yet today.',
-                style: AppTextStyles.bodyMedium,
-              ),
-            )
-          else
-            ...myMovementsToday.map((m) {
-              final isIn = m.movementType.toUpperCase() == 'IN';
-              final matches =
-                  inventory.medicines.where((med) => med.id == m.medicineId).toList();
-              final medName =
-                  matches.isNotEmpty ? matches.first.name : 'Medicine #${m.medicineId}';
-
-              return GestureDetector(
-                onTap: () => context.push(
-                  RouteNames.medicineDetail(m.medicineId),
-                ),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(vertical: 10),
-                  decoration: const BoxDecoration(
-                    border: Border(bottom: BorderSide(color: AppColors.border)),
-                  ),
-                  child: Row(
+                GestureDetector(
+                  onTap: auth.isSavingProfile ? null : _changePhoto,
+                  child: Stack(
                     children: [
-                      Container(
-                        width: 10,
-                        height: 10,
-                        margin: const EdgeInsets.only(right: 12),
-                        decoration: BoxDecoration(
-                          color: isIn ? AppColors.primary : AppColors.error,
-                          shape: BoxShape.circle,
-                        ),
+                      UserAvatar(
+                        url: user?.avatarUrl,
+                        initials: user?.initials ?? '?',
+                        radius: 33,
                       ),
-                      Expanded(
-                        child: Text(
-                          '${isIn ? 'Restocked' : 'Dispensed'} $medName',
-                          style: AppTextStyles.bodyMedium
-                              .copyWith(fontWeight: FontWeight.w700),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      Text(
-                        '${isIn ? '+' : '-'}${m.quantity}',
-                        style: TextStyle(
-                          fontWeight: FontWeight.w800,
-                          color: isIn ? AppColors.primaryDeep : AppColors.error,
+                      Positioned(
+                        right: 0,
+                        bottom: 0,
+                        child: Container(
+                          padding: const EdgeInsets.all(5),
+                          decoration: BoxDecoration(
+                            color: AppColors.dark,
+                            shape: BoxShape.circle,
+                            border: Border.all(color: AppColors.background, width: 2),
+                          ),
+                          child: auth.isSavingProfile
+                              ? const SizedBox(
+                                  width: 12,
+                                  height: 12,
+                                  child: CircularProgressIndicator(strokeWidth: 2),
+                                )
+                              : const Icon(Icons.photo_camera_rounded,
+                                  size: 12, color: Colors.white),
                         ),
                       ),
                     ],
                   ),
                 ),
-              );
-            }),
-
-          const SizedBox(height: 24),
-          OutlinedButton.icon(
-            style: OutlinedButton.styleFrom(foregroundColor: AppColors.error),
-            onPressed: () async {
-              await context.read<AuthProvider>().logout();
-              if (!context.mounted) return;
-              context.go(RouteNames.login);
-            },
-            icon: const Icon(Icons.logout_rounded),
-            label: const Text('Sign out'),
-          ),
-        ],
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(user?.displayName ?? 'Staff', style: AppTextStyles.headingSmall),
+                      Text(user?.prettyRole ?? '', style: AppTextStyles.bodySmall),
+                    ],
+                  ),
+                ),
+                IconButton(
+                  tooltip: 'Edit profile',
+                  onPressed: _editDetails,
+                  icon: const Icon(Icons.edit_rounded),
+                ),
+              ],
+            ),
+            const SizedBox(height: 18),
+            Row(
+              children: [
+                Expanded(child: _StatBox(value: '${summary.updatesToday}', label: 'Updates today')),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: _StatBox(
+                    value: signed(summary.netUnitsToday),
+                    label: 'Net units today',
+                    color: summary.netUnitsToday >= 0 ? AppColors.primaryDeep : AppColors.error,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Expanded(
+                  child: _StatBox(
+                    value: '+${summary.unitsIn7d}',
+                    label: 'Received · 7 days',
+                    color: AppColors.primaryDeep,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: _StatBox(
+                    value: '-${summary.unitsOut7d}',
+                    label: 'Removed · 7 days',
+                    color: AppColors.error,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 22),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('Recent activity', style: AppTextStyles.headingSmall),
+                TextButton(
+                  onPressed: () => context.push(RouteNames.activity),
+                  child: const Text('See all'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            if (recent.isEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 18),
+                child: Text(
+                  activity.isLoading ? 'Loading…' : 'Nothing recorded yet.',
+                  style: AppTextStyles.bodyMedium,
+                ),
+              )
+            else
+              ...recent.map((a) => ActivityTile(log: a)),
+            if (user?.canViewTeamActivity ?? false) ...[
+              const SizedBox(height: 6),
+              _NavTile(
+                icon: Icons.groups_rounded,
+                title: 'Team activity',
+                subtitle: 'See who did what, across all staff',
+                onTap: () => context.push('${RouteNames.activity}?team=1'),
+              ),
+            ],
+            _NavTile(
+              icon: Icons.swap_vert_rounded,
+              title: 'Movement history',
+              subtitle: 'Every stock in and out, with who did it',
+              onTap: () => context.push(RouteNames.movementHistory),
+            ),
+            const SizedBox(height: 22),
+            Text('Settings', style: AppTextStyles.headingSmall),
+            const SizedBox(height: 10),
+            Container(
+              decoration: BoxDecoration(
+                color: AppColors.surface,
+                border: Border.all(color: AppColors.border),
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Column(
+                children: [
+                  SwitchListTile(
+                    secondary: const Icon(Icons.dark_mode_rounded),
+                    title: const Text('Dark mode'),
+                    value: theme.isDark,
+                    activeColor: AppColors.primary,
+                    onChanged: theme.setDark,
+                  ),
+                  Divider(height: 1, color: AppColors.border),
+                  SwitchListTile(
+                    secondary: const Icon(Icons.notifications_active_rounded),
+                    title: const Text('Out-of-stock notifications'),
+                    subtitle: const Text('Repeats every 2 hours until restocked'),
+                    value: _alertsOn,
+                    activeColor: AppColors.primary,
+                    onChanged: (v) async {
+                      setState(() => _alertsOn = v);
+                      await StockAlertService.setEnabled(v);
+                    },
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 22),
+            Text('Account', style: AppTextStyles.headingSmall),
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              decoration: BoxDecoration(
+                color: AppColors.surface,
+                border: Border.all(color: AppColors.border),
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Column(
+                children: [
+                  _InfoRow(
+                    icon: Icons.badge_outlined,
+                    label: 'Username',
+                    value: user?.username.isNotEmpty == true ? user!.username : '—',
+                  ),
+                  _InfoRow(
+                    icon: Icons.mail_outline_rounded,
+                    label: 'Email',
+                    value: user?.email.isNotEmpty == true ? user!.email : '—',
+                  ),
+                  _InfoRow(
+                    icon: Icons.phone_outlined,
+                    label: 'Phone',
+                    value: user?.phoneNumber.isNotEmpty == true ? user!.phoneNumber : '—',
+                  ),
+                  _InfoRow(
+                    icon: Icons.verified_user_outlined,
+                    label: 'Role',
+                    value: user?.prettyRole ?? '—',
+                    isLast: true,
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 22),
+            OutlinedButton.icon(
+              onPressed: () => SessionHelper.signOut(context),
+              icon: const Icon(Icons.logout_rounded),
+              label: const Text('Sign out'),
+            ),
+          ],
+        ),
       ),
     );
   }
+}
 
-  String _fullName(User? user) {
-    if (user == null) return 'StockRoom User';
+class _NavTile extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
 
-    final name = '${user.firstName} ${user.lastName}'.trim();
-    if (name.isNotEmpty) return name;
-    if (user.username.isNotEmpty) return user.username;
-    return 'StockRoom User';
-  }
+  const _NavTile({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+  });
 
-  String _initials(User? user) {
-    if (user == null) return 'SR';
-
-    final first = user.firstName.trim();
-    final last = user.lastName.trim();
-
-    if (first.isNotEmpty && last.isNotEmpty) {
-      return '${first[0]}${last[0]}'.toUpperCase();
-    }
-    if (first.isNotEmpty) return first[0].toUpperCase();
-    if (user.username.isNotEmpty) return user.username[0].toUpperCase();
-    return 'SR';
-  }
-
-  String _prettyRole(String? role) {
-    if (role == null || role.isEmpty) return 'Stock Clerk';
-
-    return role
-        .split('_')
-        .map((w) => w.isEmpty ? w : '${w[0]}${w.substring(1).toLowerCase()}')
-        .join(' ');
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            border: Border.all(color: AppColors.border),
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: AppColors.successSoft,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(icon, color: AppColors.primaryDeep),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title,
+                        style: AppTextStyles.bodyMedium
+                            .copyWith(fontWeight: FontWeight.w800)),
+                    Text(subtitle, style: AppTextStyles.bodySmall),
+                  ],
+                ),
+              ),
+              Icon(Icons.chevron_right_rounded, color: AppColors.textSecondary),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }
 
@@ -291,7 +470,7 @@ class _InfoRow extends StatelessWidget {
       decoration: BoxDecoration(
         border: isLast
             ? null
-            : const Border(bottom: BorderSide(color: AppColors.border)),
+            : Border(bottom: BorderSide(color: AppColors.border)),
       ),
       child: Row(
         children: [

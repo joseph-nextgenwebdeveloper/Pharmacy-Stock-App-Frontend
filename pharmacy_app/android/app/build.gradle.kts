@@ -28,6 +28,17 @@ android {
         release {
             // Signing with the debug keys for now, so `flutter run --release` works.
             signingConfig = signingConfigs.getByName("debug")
+
+            // The code shrinker (R8) can strip classes the barcode scanner
+            // and notification plugins load at runtime, which shows up as
+            // "genericError" / missing notifications ONLY in release builds.
+            // Keep it off; proguard-rules.pro is there if it is ever enabled.
+            isMinifyEnabled = false
+            isShrinkResources = false
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro",
+            )
         }
     }
 }

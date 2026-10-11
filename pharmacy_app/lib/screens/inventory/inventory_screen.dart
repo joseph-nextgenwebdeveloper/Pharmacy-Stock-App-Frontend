@@ -9,6 +9,7 @@ import '../../providers/inventory_provider.dart';
 import '../../routes/route_names.dart';
 import '../../widgets/error_widget.dart';
 import '../../widgets/loading_widget.dart';
+import '../../widgets/medicine_image.dart';
 
 class InventoryScreen extends StatefulWidget {
   const InventoryScreen({super.key});
@@ -96,7 +97,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
                 fillColor: AppColors.surface,
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(14),
-                  borderSide: const BorderSide(color: AppColors.border),
+                  borderSide: BorderSide(color: AppColors.border),
                 ),
               ),
             ),
@@ -266,37 +267,19 @@ class _MedicineRow extends StatelessWidget {
         decoration: BoxDecoration(
           color: flagged ? AppColors.errorSoft : AppColors.surface,
           border: Border.all(
-            color: flagged ? const Color(0xFFF6D0D0) : AppColors.border,
+            color: flagged ? AppColors.errorBorder : AppColors.border,
           ),
           borderRadius: BorderRadius.circular(16),
         ),
         child: Row(
           children: [
-            Container(
-              width: 38,
-              height: 38,
-              clipBehavior: Clip.antiAlias,
-              decoration: BoxDecoration(
-                color: flagged
-                    ? const Color(0xFFFBD9D9)
-                    : AppColors.successSoft,
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: imageUrl != null && imageUrl!.isNotEmpty
-                  ? Image.network(
-                      imageUrl!,
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stack) => Icon(
-                        Icons.medication_rounded,
-                        size: 18,
-                        color: flagged ? AppColors.error : AppColors.primaryDeep,
-                      ),
-                    )
-                  : Icon(
-                      Icons.medication_rounded,
-                      size: 18,
-                      color: flagged ? AppColors.error : AppColors.primaryDeep,
-                    ),
+            MedicineImage(
+              url: imageUrl,
+              size: 44,
+              radius: 12,
+              background:
+                  flagged ? AppColors.errorTile : AppColors.successSoft,
+              iconColor: flagged ? AppColors.error : AppColors.primaryDeep,
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -325,7 +308,7 @@ class _MedicineRow extends StatelessWidget {
                       const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                   decoration: BoxDecoration(
                     color: isOut
-                        ? const Color(0xFFFBD9D9)
+                        ? AppColors.errorTile
                         : isLow
                             ? AppColors.warningSoft
                             : AppColors.successSoft,

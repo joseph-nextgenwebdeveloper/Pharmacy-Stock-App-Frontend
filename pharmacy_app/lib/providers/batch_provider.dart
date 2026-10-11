@@ -6,6 +6,7 @@ import '../services/batch_service.dart';
 class BatchProvider extends ChangeNotifier {
   List<Batch> _batches = [];
   bool _isLoading = false;
+  bool _hydrated = false;
   String? _error;
 
   List<Batch> get batches => List.unmodifiable(_batches);
@@ -13,6 +14,15 @@ class BatchProvider extends ChangeNotifier {
   String? get error => _error;
 
   Future<void> loadBatches() async {
+    if (!_hydrated) {
+      _hydrated = true;
+      final cached = await BatchService.getCachedBatches();
+      if (_batches.isEmpty && cached.isNotEmpty) {
+        _batches = cached;
+        notifyListeners();
+      }
+    }
+
     _isLoading = true;
     _error = null;
     notifyListeners();
@@ -38,6 +48,44 @@ class BatchProvider extends ChangeNotifier {
     list.sort((a, b) => b.expiryDate.compareTo(a.expiryDate));
 
     return list;
+  }
+
+  /// Batches of one medicine that can still be sold: in stock and not
+  /// expired, earliest expiry first — i.e. FEFO (First Expiry, First Out).
+  List<Batch> fefoFor(int medicineId) {
+    final list = _batches
+        .where((b) => b.medicineId == medicineId && b.isActive)
+        .toList();
+
+    list.sort((a, b) => a.expiryDate.compareTo(b.expiryDate));
+
+    return list;
+  }
+
+  /// A specific lot of a medicine, e.g. from a scanned GS1 code.
+  Batch? findLot(int medicineId, String batchNumber) {
+    final wanted = batchNumber.trim().toLowerCase();
+
+    for (final b in _batches) {
+      if (b.medicineId == medicineId &&
+          b.batchNumber.trim().toLowerCase() == wanted) {
+        return b;
+      }
+    }
+    return null;
+  }
+
+  void reset() {
+    _batches = [];
+    _hydrated = false;
+    notifyListeners();
+  }
+
+  Batch? byId(int id) {
+    for (final b in _batches) {
+      if (b.id == id) return b;
+    }
+    return null;
   }
 
   /// Creates a batch on the backend and adds it locally on success.

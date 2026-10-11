@@ -6,6 +6,7 @@ import '../services/notification_service.dart';
 class NotificationProvider extends ChangeNotifier {
   List<AppNotification> _notifications = [];
   bool _isLoading = false;
+  bool _hydrated = false;
   String? _error;
 
   List<AppNotification> get notifications =>
@@ -18,6 +19,15 @@ class NotificationProvider extends ChangeNotifier {
       _notifications.where((notification) => !notification.isRead).length;
 
   Future<void> loadNotifications() async {
+    if (!_hydrated) {
+      _hydrated = true;
+      final cached = await NotificationService.getCachedNotifications();
+      if (_notifications.isEmpty && cached.isNotEmpty) {
+        _notifications = cached;
+        notifyListeners();
+      }
+    }
+
     _isLoading = true;
     _error = null;
     notifyListeners();
@@ -53,6 +63,24 @@ class NotificationProvider extends ChangeNotifier {
       _error = e.toString();
       notifyListeners();
     }
+  }
+
+  Future<void> markAllAsRead() async {
+    try {
+      await NotificationService.markAllAsRead();
+      _notifications =
+          _notifications.map((n) => n.copyWith(isRead: true)).toList();
+      notifyListeners();
+    } catch (e) {
+      _error = e.toString();
+      notifyListeners();
+    }
+  }
+
+  void reset() {
+    _notifications = [];
+    _hydrated = false;
+    notifyListeners();
   }
 
   void clearError() {

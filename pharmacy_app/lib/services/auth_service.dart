@@ -53,6 +53,7 @@ class AuthService {
         'role': data['role'],
         'first_name': data['first_name'],
         'last_name': data['last_name'],
+        'avatar': data['avatar'],
       };
 
       await _storage.write(
@@ -162,7 +163,28 @@ class AuthService {
     return token != null && token.isNotEmpty;
   }
 
+  /// Keeps the stored copy of the signed-in user (name, photo...) current.
+  static Future<void> saveUser(Map<String, dynamic> user) async {
+    await _storage.write(key: _userKey, value: jsonEncode(user));
+  }
+
   static Future<void> logout() async {
+    // Tell the server (it blacklists the token and records the sign-out in
+    // the activity log). Best effort: signing out must work offline too.
+    try {
+      final refresh = await _storage.read(key: _refreshTokenKey);
+      if (refresh != null && refresh.isNotEmpty) {
+        await ApiService.dio.post(
+          '/accounts/logout/',
+          data: {'refresh': refresh},
+          options: Options(
+            sendTimeout: const Duration(seconds: 5),
+            receiveTimeout: const Duration(seconds: 5),
+          ),
+        );
+      }
+    } catch (_) {/* offline or already expired — sign out anyway */}
+
     await _storage.delete(key: _accessTokenKey);
     await _storage.delete(key: _refreshTokenKey);
     await _storage.delete(key: _userKey);
