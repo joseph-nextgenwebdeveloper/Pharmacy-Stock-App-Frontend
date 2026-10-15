@@ -12,6 +12,7 @@ class RouteNames {
   static const sales = '/sales';
   static const suppliers = '/suppliers';
   static const reports = '/reports';
+  static const activityReport = '/reports/activity';
   static const scanner = '/scanner';
   static const alerts = '/alerts';
   static const profile = '/profile';

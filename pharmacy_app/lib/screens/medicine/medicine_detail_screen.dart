@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../../config/app_colors.dart';
@@ -11,6 +12,8 @@ import '../../providers/batch_provider.dart';
 import '../../providers/category_provider.dart';
 import '../../providers/inventory_provider.dart';
 import '../../providers/stock_movement_provider.dart';
+import '../../routes/route_names.dart';
+import '../../widgets/movement_details.dart';
 
 class MedicineDetailScreen extends StatefulWidget {
   final int medicineId;
@@ -340,191 +343,454 @@ class _MedicineDetailScreenState extends State<MedicineDetailScreen> {
     );
   }
 
+  void _openPhoto(Medicine medicine) {
+    final url = medicine.imageUrl;
+    if (url == null || url.isEmpty) return;
+
+    showDialog<void>(
+      context: context,
+      builder: (_) => Dialog(
+        backgroundColor: Colors.black,
+        insetPadding: const EdgeInsets.all(12),
+        child: Stack(
+          children: [
+            InteractiveViewer(
+              child: Image.network(
+                url,
+                fit: BoxFit.contain,
+                errorBuilder: (_, __, ___) => const Padding(
+                  padding: EdgeInsets.all(40),
+                  child: Icon(Icons.broken_image_outlined,
+                      color: Colors.white, size: 48),
+                ),
+              ),
+            ),
+            Positioned(
+              top: 6,
+              right: 6,
+              child: IconButton(
+                onPressed: () => Navigator.of(context).pop(),
+                icon: const Icon(Icons.close_rounded, color: Colors.white),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Consumer<InventoryProvider>(
       builder: (context, provider, child) {
-        Medicine? medicine;
-
+        Medicine? found;
         for (final item in provider.medicines) {
           if (item.id == widget.medicineId) {
-            medicine = item;
+            found = item;
             break;
           }
         }
 
-        if (medicine == null) {
+        if (found == null) {
           return const Scaffold(
             body: Center(child: Text('Medicine not found.')),
           );
         }
+        final Medicine medicine = found;
 
         final categoryName =
             context.watch<CategoryProvider>().nameFor(medicine.categoryId);
         final movements =
             context.watch<StockMovementProvider>().forMedicine(medicine.id);
+        final batches = context.watch<BatchProvider>().forMedicine(medicine.id);
+
         final isOut = medicine.quantity <= 0;
         final isLow = !isOut && medicine.quantity <= medicine.reorderLevel;
+        final warn = isOut || isLow;
+
+        const onGreen = Color(0xFF06170C);
+        final fg = warn ? Colors.white : onGreen;
+
+        // ---- facts worked out from the batches ----
+        final live = batches.where((b) => b.quantity > 0).toList();
+        final expiredLive = live.where((b) => b.isExpired).toList();
+        final usable = live.where((b) => !b.isExpired).toList()
+          ..sort((a, b) => (a.daysToExpiry ?? 99999)
+              .compareTo(b.daysToExpiry ?? 99999));
+        final nearest = usable.isNotEmpty ? usable.first : null;
+        final stockValue = live.fold<double>(
+            0, (sum, b) => sum + b.quantity * b.buyingPrice);
+        final retailValue = live.fold<double>(
+            0, (sum, b) => sum + b.quantity * b.sellingPrice);
+
+        final topPad = MediaQuery.of(context).padding.top;
+
+        String money(double v) => 'KES ${Formatter.number(v.round())}';
+
+        final (statusText, statusBg, statusFg) = isOut
+            ? ('Out of stock', AppColors.error, Colors.white)
+            : isLow
+                ? ('Low', AppColors.error, Colors.white)
+                : ('In stock', Colors.black.withValues(alpha: 0.14), fg);
 
         return Scaffold(
           backgroundColor: AppColors.background,
-          body: SafeArea(
-            child: Column(
-              children: [
-                Container(
-                  padding: const EdgeInsets.fromLTRB(16, 6, 16, 22),
-                  decoration: BoxDecoration(
-                    color: isOut || isLow
-                        ? AppColors.dark
-                        : AppColors.primary,
-                    borderRadius: const BorderRadius.vertical(
-                      bottom: Radius.circular(30),
-                    ),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          _CircleIconButton(
-                            icon: Icons.arrow_back_rounded,
-                            dark: isOut || isLow,
-                            onTap: () => Navigator.of(context).maybePop(),
-                          ),
-                          MedicineImage(
-                            url: medicine.imageUrl,
-                            size: 64,
-                            radius: 16,
-                            background: Colors.black.withValues(alpha: 0.12),
-                            iconColor: isOut || isLow
-                                ? Colors.white
-                                : const Color(0xFF06170C),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 18),
-                      Text(
-                        '${medicine.quantity}',
-                        style: TextStyle(
-                          fontSize: 34,
-                          fontWeight: FontWeight.w800,
-                          color: isOut || isLow
-                              ? Colors.white
-                              : const Color(0xFF06170C),
-                        ),
-                      ),
-                      Text(
-                        medicine.name,
-                        style: TextStyle(
-                          fontSize: 19,
-                          fontWeight: FontWeight.w800,
-                          color: isOut || isLow
-                              ? Colors.white
-                              : const Color(0xFF06170C),
-                        ),
-                      ),
-                      Text(
-                        '${medicine.units} · $categoryName',
-                        style: TextStyle(
-                          fontWeight: FontWeight.w700,
-                          fontSize: 12.5,
-                          color: (isOut || isLow
-                                  ? Colors.white
-                                  : const Color(0xFF06170C))
-                              .withValues(alpha: 0.75),
-                        ),
-                      ),
-                      const SizedBox(height: 14),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 14, vertical: 10),
-                        decoration: BoxDecoration(
-                          color: Colors.black.withValues(alpha: 0.12),
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(
-                              'SKU  ${medicine.sku}',
-                              style: TextStyle(
-                                fontWeight: FontWeight.w800,
-                                fontSize: 12.5,
-                                color: isOut || isLow
-                                    ? Colors.white
-                                    : const Color(0xFF06170C),
-                              ),
-                            ),
-                            Text(
-                              'Reorder at ${medicine.reorderLevel}',
-                              style: TextStyle(
-                                fontWeight: FontWeight.w700,
-                                fontSize: 11.5,
-                                color: (isOut || isLow
-                                        ? Colors.white
-                                        : const Color(0xFF06170C))
-                                    .withValues(alpha: 0.8),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
+          body: ListView(
+            padding: EdgeInsets.zero,
+            children: [
+              // ============================================ hero
+              Container(
+                padding: EdgeInsets.fromLTRB(16, topPad + 8, 16, 20),
+                decoration: BoxDecoration(
+                  color: warn ? AppColors.dark : AppColors.primary,
+                  borderRadius: const BorderRadius.vertical(
+                    bottom: Radius.circular(32),
                   ),
                 ),
-                Expanded(
-                  child: ListView(
-                    padding: const EdgeInsets.fromLTRB(20, 18, 20, 110),
-                    children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: _ActionButton(
-                              label: 'Stock in',
-                              icon: Icons.add_rounded,
-                              color: AppColors.primaryDeep,
-                              bg: AppColors.successSoft,
-                              onTap: () =>
-                                  _openStockSheet(medicine!, isIn: true),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        _CircleIconButton(
+                          icon: Icons.arrow_back_rounded,
+                          dark: warn,
+                          onTap: () => Navigator.of(context).maybePop(),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: statusBg,
+                            borderRadius: BorderRadius.circular(100),
+                          ),
+                          child: Text(
+                            statusText,
+                            style: TextStyle(
+                              fontWeight: FontWeight.w800,
+                              fontSize: 12,
+                              color: statusFg,
                             ),
                           ),
-                          const SizedBox(width: 10),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+
+                    // ---- the big photo ----
+                    GestureDetector(
+                      onTap: () => _openPhoto(medicine),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(26),
+                        child: Container(
+                          width: double.infinity,
+                          height: 240,
+                          color: Colors.white.withValues(alpha: 0.9),
+                          alignment: Alignment.center,
+                          child: (medicine.imageUrl == null ||
+                                  medicine.imageUrl!.isEmpty)
+                              ? const DefaultMedicineArt(size: 150)
+                              : Image.network(
+                                  medicine.imageUrl!,
+                                  width: double.infinity,
+                                  height: 240,
+                                  fit: BoxFit.cover,
+                                  loadingBuilder: (c, child, progress) =>
+                                      progress == null
+                                          ? child
+                                          : const DefaultMedicineArt(size: 150),
+                                  errorBuilder: (c, e, st) =>
+                                      const DefaultMedicineArt(size: 150),
+                                ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 18),
+
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text.rich(
+                          TextSpan(
+                            text: Formatter.number(medicine.quantity),
+                            style: TextStyle(
+                              fontSize: 46,
+                              fontWeight: FontWeight.w800,
+                              height: 1,
+                              color: fg,
+                            ),
+                            children: [
+                              TextSpan(
+                                text: ' units',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w800,
+                                  color: fg.withValues(alpha: 0.7),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              Text(
+                                medicine.name,
+                                textAlign: TextAlign.right,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 19,
+                                  fontWeight: FontWeight.w800,
+                                  color: fg,
+                                ),
+                              ),
+                              Text(
+                                categoryName,
+                                textAlign: TextAlign.right,
+                                style: TextStyle(
+                                  fontSize: 12.5,
+                                  fontWeight: FontWeight.w700,
+                                  color: fg.withValues(alpha: 0.75),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: AppColors.dark,
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: Row(
+                        children: [
+                          const Text(
+                            'SKU',
+                            style: TextStyle(
+                              color: AppColors.onDarkMuted,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 11.5,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
                           Expanded(
-                            child: _ActionButton(
-                              label: 'Stock out',
-                              icon: Icons.remove_rounded,
-                              color: AppColors.error,
-                              bg: AppColors.errorSoft,
-                              onTap: () =>
-                                  _openStockSheet(medicine!, isIn: false),
+                            child: Text(
+                              medicine.sku,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w800,
+                                fontSize: 13.5,
+                              ),
+                            ),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 10, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: AppColors.primary,
+                              borderRadius: BorderRadius.circular(100),
+                            ),
+                            child: Text(
+                              medicine.units,
+                              style: const TextStyle(
+                                color: onGreen,
+                                fontWeight: FontWeight.w800,
+                                fontSize: 11.5,
+                              ),
                             ),
                           ),
                         ],
                       ),
-                      const SizedBox(height: 10),
-                      OutlinedButton.icon(
-                        onPressed: () => _openAddBatchSheet(medicine!),
-                        icon: const Icon(Icons.inventory_outlined, size: 18),
-                        label: const Text('Add batch'),
-                      ),
-                      const SizedBox(height: 22),
-                      Text('Movement history', style: AppTextStyles.headingSmall),
-                      const SizedBox(height: 8),
-                      if (movements.isEmpty)
-                        Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          child: Text(
-                            'No movements recorded for this medicine yet.',
-                            style: AppTextStyles.bodyMedium,
-                          ),
-                        )
-                      else
-                        ...movements.map((m) {
-                          final isIn = m.movementType.toUpperCase() == 'IN';
+                    ),
+                  ],
+                ),
+              ),
 
-                          return Container(
-                            padding: const EdgeInsets.symmetric(vertical: 10),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 18, 20, 110),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // ======================================= actions
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _BigAction(
+                            label: 'Stock in',
+                            hint: 'Add on restock',
+                            icon: Icons.add_rounded,
+                            bg: AppColors.primary,
+                            fg: onGreen,
+                            iconBg: Colors.black.withValues(alpha: 0.14),
+                            iconColor: onGreen,
+                            onTap: () => _openStockSheet(medicine, isIn: true),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: _BigAction(
+                            label: 'Stock out',
+                            hint: 'Dispense / usage',
+                            icon: Icons.remove_rounded,
+                            bg: AppColors.dark,
+                            fg: Colors.white,
+                            iconBg: AppColors.error,
+                            iconColor: Colors.white,
+                            onTap: () => _openStockSheet(medicine, isIn: false),
+                          ),
+                        ),
+                      ],
+                    ),
+
+                    // ================================ warnings
+                    if (expiredLive.isNotEmpty) ...[
+                      const SizedBox(height: 14),
+                      _Notice(
+                        color: AppColors.error,
+                        bg: AppColors.errorSoft,
+                        icon: Icons.event_busy_rounded,
+                        text:
+                            '${expiredLive.length} expired batch${expiredLive.length == 1 ? '' : 'es'} '
+                            'still hold ${expiredLive.fold<int>(0, (s, b) => s + b.quantity)} units. '
+                            'They cannot be dispensed - write them off.',
+                      ),
+                    ],
+                    if (isOut || isLow) ...[
+                      const SizedBox(height: 10),
+                      _Notice(
+                        color: AppColors.error,
+                        bg: AppColors.errorSoft,
+                        icon: Icons.warning_amber_rounded,
+                        text: isOut
+                            ? 'Out of stock. Reorder level is ${medicine.reorderLevel}.'
+                            : 'Only ${medicine.quantity} left - reorder at ${medicine.reorderLevel}.',
+                      ),
+                    ],
+
+                    // ================================ details
+                    const SizedBox(height: 22),
+                    Text('Details', style: AppTextStyles.headingSmall),
+                    const SizedBox(height: 10),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: AppColors.surface,
+                        border: Border.all(color: AppColors.border),
+                        borderRadius: BorderRadius.circular(22),
+                      ),
+                      child: Wrap(
+                        runSpacing: 16,
+                        children: [
+                          _Fact('Generic name',
+                              medicine.genericName.isEmpty ? '-' : medicine.genericName),
+                          _Fact('Category', categoryName),
+                          _Fact('SKU', medicine.sku),
+                          _Fact('Barcode',
+                              (medicine.barcode == null || medicine.barcode!.isEmpty)
+                                  ? 'Not set'
+                                  : medicine.barcode!),
+                          _Fact('Unit / pack', medicine.units),
+                          _Fact('Reorder level', '${medicine.reorderLevel} units'),
+                          _Fact('Expiry warning',
+                              '${medicine.expiryAlertDays} days before'),
+                          _Fact('Batches in stock', '${live.length}'),
+                          _Fact(
+                            'Nearest expiry',
+                            nearest == null
+                                ? '-'
+                                : '${Formatter.date(nearest.expiryDate)}'
+                                    '${nearest.daysToExpiry == null ? '' : ' (${nearest.daysToExpiry}d)'}',
+                          ),
+                          _Fact('Stock value (cost)',
+                              live.isEmpty ? '-' : money(stockValue)),
+                          if (retailValue > 0)
+                            _Fact('Stock value (retail)', money(retailValue)),
+                        ],
+                      ),
+                    ),
+
+                    if (medicine.description.isNotEmpty) ...[
+                      const SizedBox(height: 18),
+                      Text('Description', style: AppTextStyles.headingSmall),
+                      const SizedBox(height: 6),
+                      Text(medicine.description,
+                          style: AppTextStyles.bodyMedium),
+                    ],
+
+                    // ================================ batches
+                    const SizedBox(height: 22),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text('Batches (${batches.length})',
+                              style: AppTextStyles.headingSmall),
+                        ),
+                        TextButton.icon(
+                          onPressed: () => _openAddBatchSheet(medicine),
+                          icon: const Icon(Icons.add_rounded, size: 18),
+                          label: const Text('Add batch'),
+                        ),
+                      ],
+                    ),
+                    if (batches.isEmpty)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        child: Text(
+                          'No batches yet. Add one to start recording stock.',
+                          style: AppTextStyles.bodyMedium,
+                        ),
+                      )
+                    else
+                      ...batches.map((b) => _BatchTile(batch: b)),
+
+                    // ================================ movements
+                    const SizedBox(height: 22),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text('Movement history',
+                              style: AppTextStyles.headingSmall),
+                        ),
+                        if (movements.length > 8)
+                          TextButton(
+                            onPressed: () =>
+                                context.push(RouteNames.movementHistory),
+                            child: const Text('See all'),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    if (movements.isEmpty)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        child: Text(
+                          'No movements recorded for this medicine yet.',
+                          style: AppTextStyles.bodyMedium,
+                        ),
+                      )
+                    else
+                      ...movements.take(8).map((m) {
+                        final isIn = m.isIn;
+                        final color =
+                            isIn ? AppColors.primaryDeep : AppColors.error;
+
+                        return GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onTap: () => showMovementDetails(context, m),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(vertical: 11),
                             decoration: BoxDecoration(
                               border: Border(
                                 bottom: BorderSide(color: AppColors.border),
@@ -533,8 +799,8 @@ class _MedicineDetailScreenState extends State<MedicineDetailScreen> {
                             child: Row(
                               children: [
                                 Container(
-                                  width: 32,
-                                  height: 32,
+                                  width: 34,
+                                  height: 34,
                                   decoration: BoxDecoration(
                                     color: isIn
                                         ? AppColors.successSoft
@@ -545,10 +811,8 @@ class _MedicineDetailScreenState extends State<MedicineDetailScreen> {
                                     isIn
                                         ? Icons.arrow_upward_rounded
                                         : Icons.arrow_downward_rounded,
-                                    size: 15,
-                                    color: isIn
-                                        ? AppColors.primaryDeep
-                                        : AppColors.error,
+                                    size: 16,
+                                    color: color,
                                   ),
                                 ),
                                 const SizedBox(width: 12),
@@ -558,38 +822,39 @@ class _MedicineDetailScreenState extends State<MedicineDetailScreen> {
                                         CrossAxisAlignment.start,
                                     children: [
                                       Text(
-                                        '${isIn ? '+' : '-'}${m.quantity} '
-                                        '${isIn ? 'restock' : 'dispensed'}',
+                                        '${isIn ? '+' : '-'}${m.quantity} ${m.label.toLowerCase()}',
                                         style: AppTextStyles.bodyMedium
                                             .copyWith(
                                                 fontWeight: FontWeight.w800),
                                       ),
                                       Text(
-                                        Formatter.timeAgo(
-                                          m.movementDate.isNotEmpty
-                                              ? m.movementDate
-                                              : m.date,
-                                        ),
+                                        '${m.who}'
+                                        '${m.batchNumber.isEmpty ? '' : ' · ${m.batchNumber}'}'
+                                        ' · ${Formatter.timeAgo(m.movementDate.isNotEmpty ? m.movementDate : m.date)}',
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
                                         style: AppTextStyles.bodySmall,
                                       ),
                                     ],
                                   ),
                                 ),
+                                Text(
+                                  isIn ? 'IN' : 'OUT',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: 12,
+                                    color: color,
+                                  ),
+                                ),
                               ],
                             ),
-                          );
-                        }),
-                      if (medicine.description.isNotEmpty) ...[
-                        const SizedBox(height: 22),
-                        Text('Description', style: AppTextStyles.headingSmall),
-                        const SizedBox(height: 6),
-                        Text(medicine.description, style: AppTextStyles.bodyMedium),
-                      ],
-                    ],
-                  ),
+                          ),
+                        );
+                      }),
+                  ],
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         );
       },
@@ -613,15 +878,15 @@ class _CircleIconButton extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        width: 34,
-        height: 34,
+        width: 38,
+        height: 38,
         decoration: BoxDecoration(
-          color: Colors.black.withValues(alpha: 0.12),
+          color: Colors.black.withValues(alpha: 0.14),
           shape: BoxShape.circle,
         ),
         child: Icon(
           icon,
-          size: 18,
+          size: 19,
           color: dark ? Colors.white : const Color(0xFF06170C),
         ),
       ),
@@ -629,18 +894,24 @@ class _CircleIconButton extends StatelessWidget {
   }
 }
 
-class _ActionButton extends StatelessWidget {
+class _BigAction extends StatelessWidget {
   final String label;
+  final String hint;
   final IconData icon;
-  final Color color;
   final Color bg;
+  final Color fg;
+  final Color iconBg;
+  final Color iconColor;
   final VoidCallback onTap;
 
-  const _ActionButton({
+  const _BigAction({
     required this.label,
+    required this.hint,
     required this.icon,
-    required this.color,
     required this.bg,
+    required this.fg,
+    required this.iconBg,
+    required this.iconColor,
     required this.onTap,
   });
 
@@ -649,21 +920,196 @@ class _ActionButton extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 16),
+        padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
           color: bg,
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(22),
         ),
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Icon(icon, color: color),
-            const SizedBox(height: 6),
+            Container(
+              width: 34,
+              height: 34,
+              decoration: BoxDecoration(
+                color: iconBg,
+                borderRadius: BorderRadius.circular(11),
+              ),
+              child: Icon(icon, size: 20, color: iconColor),
+            ),
+            const SizedBox(height: 16),
             Text(
               label,
-              style: TextStyle(fontWeight: FontWeight.w800, color: color, fontSize: 13),
+              style: TextStyle(
+                fontWeight: FontWeight.w800,
+                fontSize: 17,
+                color: fg,
+              ),
+            ),
+            Text(
+              hint,
+              style: TextStyle(
+                fontWeight: FontWeight.w600,
+                fontSize: 11.5,
+                color: fg.withValues(alpha: 0.75),
+              ),
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _Notice extends StatelessWidget {
+  final Color color;
+  final Color bg;
+  final IconData icon;
+  final String text;
+
+  const _Notice({
+    required this.color,
+    required this.bg,
+    required this.icon,
+    required this.text,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 18, color: color),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              text,
+              style: AppTextStyles.bodySmall
+                  .copyWith(color: color, fontWeight: FontWeight.w700),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Label over value, two to a row.
+class _Fact extends StatelessWidget {
+  final String label;
+  final String value;
+
+  const _Fact(this.label, this.value);
+
+  @override
+  Widget build(BuildContext context) {
+    return FractionallySizedBox(
+      widthFactor: 0.5,
+      child: Padding(
+        padding: const EdgeInsets.only(right: 10),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(label, style: AppTextStyles.bodySmall),
+            const SizedBox(height: 2),
+            Text(
+              value,
+              style: AppTextStyles.bodyMedium
+                  .copyWith(fontWeight: FontWeight.w800),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _BatchTile extends StatelessWidget {
+  final Batch batch;
+
+  const _BatchTile({required this.batch});
+
+  @override
+  Widget build(BuildContext context) {
+    final days = batch.daysToExpiry;
+
+    final (label, bg, fg) = batch.isExpired
+        ? ('Expired', AppColors.errorSoft, AppColors.error)
+        : batch.isDepleted
+            ? ('Used up', AppColors.background, AppColors.textSecondary)
+            : batch.isExpiringSoon
+                ? ('Expiring', AppColors.warningSoft, AppColors.warning)
+                : ('Active', AppColors.successSoft, AppColors.primaryDeep);
+
+    final facts = <String>[
+      'Exp ${Formatter.date(batch.expiryDate)}'
+          '${(days == null || batch.isDepleted) ? '' : (days < 0 ? ' (${-days}d ago)' : ' (in ${days}d)')}',
+      if (batch.supplierName.isNotEmpty) batch.supplierName,
+      if (batch.buyingPrice > 0)
+        'Cost ${Formatter.number(batch.buyingPrice.round())}',
+    ];
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        border: Border.all(color: AppColors.border),
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Batch ${batch.batchNumber}',
+                  style: AppTextStyles.bodyMedium
+                      .copyWith(fontWeight: FontWeight.w800),
+                ),
+                const SizedBox(height: 2),
+                Text(facts.join(' · '), style: AppTextStyles.bodySmall),
+              ],
+            ),
+          ),
+          const SizedBox(width: 10),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                batch.originalQuantity > 0
+                    ? '${batch.quantity} / ${batch.originalQuantity}'
+                    : '${batch.quantity}',
+                style: const TextStyle(
+                    fontWeight: FontWeight.w800, fontSize: 16),
+              ),
+              const SizedBox(height: 4),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
+                decoration: BoxDecoration(
+                  color: bg,
+                  borderRadius: BorderRadius.circular(100),
+                ),
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w800,
+                    color: fg,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }

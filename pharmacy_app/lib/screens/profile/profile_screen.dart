@@ -330,8 +330,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   Divider(height: 1, color: AppColors.border),
                   SwitchListTile(
                     secondary: const Icon(Icons.notifications_active_rounded),
-                    title: const Text('Out-of-stock notifications'),
-                    subtitle: const Text('Repeats every 2 hours until restocked'),
+                    title: const Text('Daily stock notifications'),
+                    subtitle: const Text('One out-of-stock and one expired reminder a day'),
                     value: _alertsOn,
                     activeColor: AppColors.primary,
                     onChanged: (v) async {

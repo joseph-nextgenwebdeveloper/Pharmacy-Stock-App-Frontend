@@ -16,6 +16,7 @@ import '../screens/movement/movement_history_screen.dart';
 import '../screens/activity/activity_screen.dart';
 import '../screens/profile/profile_screen.dart';
 import '../screens/purchases/purchase_screen.dart';
+import '../screens/reports/activity_report_screen.dart';
 import '../screens/reports/reports_screen.dart';
 import '../screens/sales/sales_screen.dart';
 import '../screens/scanner/scanner_screen.dart';
@@ -156,6 +157,13 @@ class AppRouter {
             path: RouteNames.reports,
             builder: (context, state) =>
                 const ReportsScreen(),
+          ),
+          GoRoute(
+            path: RouteNames.activityReport,
+            builder: (context, state) => ActivityReportScreen(
+              initialPeriod:
+                  state.uri.queryParameters['period'] ?? 'week',
+            ),
           ),
           GoRoute(
             path: RouteNames.scanner,

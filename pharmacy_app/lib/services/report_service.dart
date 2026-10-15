@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 
+import '../models/activity_report.dart';
 import '../models/expired_medicine_report.dart';
 import '../models/fast_moving_medicine.dart';
 import '../models/inventory_report.dart';
@@ -126,6 +127,32 @@ class ReportService {
         e.response?.data?['detail'] ??
             'Failed to load slow-moving medicine report.',
       );
+    }
+  }
+
+  /// Movements + other activity for a day / week / month / custom range.
+  static Future<ActivityReport> getActivityReport({
+    required String period,
+    DateTime? date,
+    DateTime? start,
+    DateTime? end,
+  }) async {
+    try {
+      final response = await ApiService.dio.get(
+        '${_baseEndpoint}activity/',
+        queryParameters: {
+          'period': period,
+          if (date != null) 'date': ActivityReport.ymd(date),
+          if (start != null) 'start': ActivityReport.ymd(start),
+          if (end != null) 'end': ActivityReport.ymd(end),
+        },
+      );
+
+      return ActivityReport.fromJson(
+        Map<String, dynamic>.from(response.data as Map),
+      );
+    } on DioException catch (e) {
+      throw ApiService.exceptionFor(e, 'Failed to load the activity report.');
     }
   }
 

@@ -33,6 +33,11 @@ class Dashboard {
   final int myUpdatesToday;
   final List<DayMovement> weeklyMovements;
 
+  /// Last 7 days vs the 7 days before (older backends don't send these).
+  final int? _weekDispensed;
+  final int? _weekReceived;
+  final int prevWeekDispensed;
+
   const Dashboard({
     required this.totalMedicines,
     required this.totalStock,
@@ -47,7 +52,25 @@ class Dashboard {
     this.expiringBatches = 0,
     this.myUpdatesToday = 0,
     this.weeklyMovements = const [],
-  });
+    int? weekDispensed,
+    int? weekReceived,
+    this.prevWeekDispensed = 0,
+  })  : _weekDispensed = weekDispensed,
+        _weekReceived = weekReceived;
+
+  int get weekDispensed =>
+      _weekDispensed ?? weeklyMovements.fold<int>(0, (s, d) => s + d.unitsOut);
+
+  int get weekReceived =>
+      _weekReceived ?? weeklyMovements.fold<int>(0, (s, d) => s + d.unitsIn);
+
+  /// +12 / -8 (percent) change in dispensed units vs the previous 7 days,
+  /// or null when there is nothing to compare with.
+  int? get dispensedTrendPercent {
+    if (prevWeekDispensed <= 0) return null;
+    return (((weekDispensed - prevWeekDispensed) * 100) / prevWeekDispensed)
+        .round();
+  }
 
   factory Dashboard.fromJson(
     Map<String, dynamic> json,
@@ -73,6 +96,9 @@ class Dashboard {
               .map((m) => DayMovement.fromJson(Map<String, dynamic>.from(m)))
               .toList()
           : const [],
+      weekDispensed: json['week_dispensed'] as int?,
+      weekReceived: json['week_received'] as int?,
+      prevWeekDispensed: json['prev_week_dispensed'] ?? 0,
     );
   }
 }

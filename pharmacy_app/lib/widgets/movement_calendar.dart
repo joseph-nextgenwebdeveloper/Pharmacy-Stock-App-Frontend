@@ -1,28 +1,32 @@
 import 'package:flutter/material.dart';
-
-import 'movement_details.dart';
 import 'package:intl/intl.dart';
 
 import '../config/app_colors.dart';
 import '../config/app_text_styles.dart';
 import '../models/medicine.dart';
 import '../models/stock_movement.dart';
+import '../models/user.dart';
 import 'medicine_image.dart';
+import 'movement_details.dart';
 
-/// Month calendar of stock movements plus a full "what happened on this
-/// day" view: totals, per-medicine breakdown and a time-ordered timeline.
+/// Month calendar of stock movements plus a clean "what happened on this
+/// day" panel: totals, a bar per medicine and a time-ordered timeline.
 /// Everything is computed client-side from the movements list.
 class MovementCalendar extends StatefulWidget {
   final List<StockMovement> movements;
   final List<Medicine> medicines;
 
-  /// Called when the person taps "Print day report".
+  /// "Download PDF" for the selected day.
+  final void Function(DateTime day)? onDownloadDay;
+
+  /// "Print" for the selected day.
   final void Function(DateTime day, List<StockMovement> moves)? onPrintDay;
 
   const MovementCalendar({
     super.key,
     required this.movements,
     required this.medicines,
+    this.onDownloadDay,
     this.onPrintDay,
   });
 
@@ -110,8 +114,9 @@ class _MovementCalendarState extends State<MovementCalendar> {
         DateTime(_visibleMonth.year, _visibleMonth.month + 1, 0).day;
     final leadingBlanks = (firstOfMonth.weekday + 6) % 7; // Monday first
 
-    final selectedMoves = [...(byDay[_dayOnly(_selectedDay)] ?? <StockMovement>[])]
-      ..sort((a, b) {
+    final selectedMoves = [
+      ...(byDay[_dayOnly(_selectedDay)] ?? <StockMovement>[])
+    ]..sort((a, b) {
         final wa = a.when, wb = b.when;
         if (wa == null || wb == null) return 0;
         return wb.compareTo(wa); // newest first
@@ -121,16 +126,16 @@ class _MovementCalendarState extends State<MovementCalendar> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Container(
-          padding: const EdgeInsets.all(14),
+          padding: const EdgeInsets.fromLTRB(12, 14, 12, 12),
           decoration: BoxDecoration(
             color: AppColors.surface,
             border: Border.all(color: AppColors.border),
-            borderRadius: BorderRadius.circular(22),
+            borderRadius: BorderRadius.circular(24),
           ),
           child: Column(
             children: [
               _buildMonthHeader(today),
-              const SizedBox(height: 10),
+              const SizedBox(height: 12),
               Row(
                 children: const ['M', 'T', 'W', 'T', 'F', 'S', 'S']
                     .map((d) => Expanded(
@@ -138,7 +143,7 @@ class _MovementCalendarState extends State<MovementCalendar> {
                             child: Text(
                               d,
                               style: TextStyle(
-                                fontSize: 10.5,
+                                fontSize: 11,
                                 fontWeight: FontWeight.w800,
                                 color: AppColors.textSecondary,
                               ),
@@ -153,7 +158,7 @@ class _MovementCalendarState extends State<MovementCalendar> {
                 physics: const NeverScrollableScrollPhysics(),
                 gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                   crossAxisCount: 7,
-                  childAspectRatio: 0.88,
+                  childAspectRatio: 1,
                 ),
                 itemCount: leadingBlanks + daysInMonth,
                 itemBuilder: (context, index) {
@@ -163,59 +168,48 @@ class _MovementCalendarState extends State<MovementCalendar> {
                   final date =
                       DateTime(_visibleMonth.year, _visibleMonth.month, day);
                   final moves = byDay[date] ?? const <StockMovement>[];
-                  final hasIn = moves.any((m) => m.isIn);
-                  final hasOut = moves.any((m) => !m.isIn);
                   final isSelected = date == _dayOnly(_selectedDay);
                   final isToday = date == today;
-                  final isHot =
-                      moves.isNotEmpty && busiest > 0 && moves.length >= busiest * 0.6;
+                  final isHot = moves.isNotEmpty &&
+                      busiest > 0 &&
+                      moves.length >= busiest * 0.6;
+                  final isFuture = date.isAfter(today);
 
                   Color? bg;
-                  Color fg = AppColors.textPrimary;
+                  Color fg = isFuture
+                      ? AppColors.textSecondary.withValues(alpha: 0.6)
+                      : AppColors.textPrimary;
                   if (isSelected) {
                     bg = AppColors.dark;
                     fg = Colors.white;
                   } else if (moves.isNotEmpty) {
                     bg = isHot ? AppColors.primary : AppColors.successSoft;
-                    fg = isHot ? const Color(0xFF06170C) : AppColors.primaryDeep;
+                    fg = isHot
+                        ? const Color(0xFF06170C)
+                        : AppColors.primaryDeep;
                   }
 
                   return Padding(
-                    padding: const EdgeInsets.all(2),
+                    padding: const EdgeInsets.all(2.5),
                     child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
                       onTap: () => setState(() => _selectedDay = date),
                       child: Container(
+                        alignment: Alignment.center,
                         decoration: BoxDecoration(
                           color: bg,
-                          borderRadius: BorderRadius.circular(12),
+                          shape: BoxShape.circle,
                           border: isToday && !isSelected
                               ? Border.all(color: AppColors.dark, width: 1.4)
                               : null,
                         ),
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Text(
-                              '$day',
-                              style: TextStyle(
-                                fontSize: 12.5,
-                                fontWeight: FontWeight.w800,
-                                color: fg,
-                              ),
-                            ),
-                            const SizedBox(height: 3),
-                            SizedBox(
-                              height: 5,
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  if (hasIn) _dot(AppColors.primaryDeep, isSelected),
-                                  if (hasIn && hasOut) const SizedBox(width: 2),
-                                  if (hasOut) _dot(AppColors.error, isSelected),
-                                ],
-                              ),
-                            ),
-                          ],
+                        child: Text(
+                          '$day',
+                          style: TextStyle(
+                            fontSize: 13.5,
+                            fontWeight: FontWeight.w800,
+                            color: fg,
+                          ),
                         ),
                       ),
                     ),
@@ -223,45 +217,51 @@ class _MovementCalendarState extends State<MovementCalendar> {
                 },
               ),
               const SizedBox(height: 8),
-              Row(
-                children: [
-                  _legend(AppColors.primaryDeep, 'Received'),
-                  const SizedBox(width: 12),
-                  _legend(AppColors.error, 'Dispensed'),
-                  const Spacer(),
-                  Text(
-                    '$monthMoves moves · +$monthIn / −$monthOut',
-                    style: AppTextStyles.bodySmall,
-                  ),
-                ],
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 6),
+                child: Row(
+                  children: [
+                    _legend(AppColors.primary, 'Busy'),
+                    const SizedBox(width: 12),
+                    _legend(
+                      AppColors.successSoft,
+                      'Some activity',
+                      border: AppColors.primaryDeep,
+                    ),
+                    const Spacer(),
+                    Flexible(
+                      child: Text(
+                        '$monthMoves moves · +$monthIn / -$monthOut',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppTextStyles.bodySmall,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ],
           ),
         ),
-        const SizedBox(height: 14),
+        const SizedBox(height: 18),
         _buildDayDetail(selectedMoves),
       ],
     );
   }
 
-  Widget _dot(Color color, bool onDark) => Container(
-        width: 5,
-        height: 5,
-        decoration: BoxDecoration(
-          color: onDark ? Colors.white : color,
-          shape: BoxShape.circle,
-        ),
-      );
-
-  Widget _legend(Color color, String label) => Row(
+  Widget _legend(Color color, String label, {Color? border}) => Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           Container(
-            width: 7,
-            height: 7,
-            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+            width: 9,
+            height: 9,
+            decoration: BoxDecoration(
+              color: color,
+              shape: BoxShape.circle,
+              border: border == null ? null : Border.all(color: border),
+            ),
           ),
-          const SizedBox(width: 4),
+          const SizedBox(width: 5),
           Text(label, style: AppTextStyles.bodySmall),
         ],
       );
@@ -270,13 +270,14 @@ class _MovementCalendarState extends State<MovementCalendar> {
     Widget arrow(IconData icon, VoidCallback onTap) => GestureDetector(
           onTap: onTap,
           child: Container(
-            width: 34,
-            height: 34,
+            width: 38,
+            height: 38,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
+              color: AppColors.background,
               border: Border.all(color: AppColors.border),
             ),
-            child: Icon(icon, size: 19),
+            child: Icon(icon, size: 20, color: AppColors.textPrimary),
           ),
         );
 
@@ -291,25 +292,49 @@ class _MovementCalendarState extends State<MovementCalendar> {
               DateTime(_visibleMonth.year, _visibleMonth.month - 1)),
         ),
         Expanded(
-          child: GestureDetector(
-            onTap: () async {
-              final picked = await showDatePicker(
-                context: context,
-                initialDate: _selectedDay,
-                firstDate: DateTime(2020),
-                lastDate: DateTime(today.year + 1, 12, 31),
-              );
-              if (picked != null) {
-                setState(() {
-                  _selectedDay = _dayOnly(picked);
-                  _visibleMonth = DateTime(picked.year, picked.month);
-                });
-              }
-            },
-            child: Center(
-              child: Text(
-                DateFormat('MMMM y').format(_visibleMonth),
-                style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15),
+          child: Center(
+            child: GestureDetector(
+              onTap: () async {
+                final picked = await showDatePicker(
+                  context: context,
+                  initialDate: _selectedDay,
+                  firstDate: DateTime(2020),
+                  lastDate: DateTime(today.year + 1, 12, 31),
+                );
+                if (picked != null) {
+                  setState(() {
+                    _selectedDay = _dayOnly(picked);
+                    _visibleMonth = DateTime(picked.year, picked.month);
+                  });
+                }
+              },
+              child: Container(
+                padding:
+                    const EdgeInsets.only(left: 16, right: 6, top: 6, bottom: 6),
+                decoration: BoxDecoration(
+                  color: AppColors.background,
+                  borderRadius: BorderRadius.circular(100),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      DateFormat('MMMM y').format(_visibleMonth),
+                      style: const TextStyle(
+                          fontWeight: FontWeight.w800, fontSize: 14.5),
+                    ),
+                    const SizedBox(width: 6),
+                    Container(
+                      width: 26,
+                      height: 26,
+                      decoration: BoxDecoration(
+                        color: AppColors.surface,
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(Icons.expand_more_rounded, size: 18),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
@@ -322,14 +347,18 @@ class _MovementCalendarState extends State<MovementCalendar> {
             }),
             child: Container(
               margin: const EdgeInsets.only(right: 8),
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 8),
               decoration: BoxDecoration(
-                color: AppColors.background,
+                color: AppColors.dark,
                 borderRadius: BorderRadius.circular(100),
               ),
               child: const Text(
                 'Today',
-                style: TextStyle(fontWeight: FontWeight.w800, fontSize: 11.5),
+                style: TextStyle(
+                  fontWeight: FontWeight.w800,
+                  fontSize: 11.5,
+                  color: Colors.white,
+                ),
               ),
             ),
           ),
@@ -343,7 +372,7 @@ class _MovementCalendarState extends State<MovementCalendar> {
   }
 
   // --------------------------------------------------------------------
-  // Day detail
+  // Day detail (matches the "11 July · 14 moves · IN / OUT" design)
   // --------------------------------------------------------------------
 
   Widget _buildDayDetail(List<StockMovement> moves) {
@@ -362,20 +391,33 @@ class _MovementCalendarState extends State<MovementCalendar> {
       }
     }
 
+    final ordered = perMedicine.entries.toList()
+      ..sort((a, b) => (b.value[0] + b.value[1]).compareTo(a.value[0] + a.value[1]));
+
+    var peak = 1;
+    for (final e in ordered) {
+      final t = e.value[0] + e.value[1];
+      if (t > peak) peak = t;
+    }
+
     final net = inQty - outQty;
     final timeFmt = DateFormat('HH:mm');
+    final hasActions = widget.onDownloadDay != null || widget.onPrintDay != null;
 
     return Container(
-      padding: const EdgeInsets.all(16),
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
         color: AppColors.surface,
         border: Border.all(color: AppColors.border),
-        borderRadius: BorderRadius.circular(22),
+        borderRadius: BorderRadius.circular(24),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // ---- title row: weekday, big date, "N moves" pill, PDF menu ----
           Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               Expanded(
                 child: Column(
@@ -385,45 +427,107 @@ class _MovementCalendarState extends State<MovementCalendar> {
                       DateFormat('EEEE').format(_selectedDay),
                       style: AppTextStyles.bodySmall,
                     ),
-                    Text(
-                      DateFormat('d MMMM y').format(_selectedDay),
-                      style: AppTextStyles.headingMedium,
+                    const SizedBox(height: 2),
+                    Wrap(
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      spacing: 10,
+                      runSpacing: 6,
+                      children: [
+                        Text(
+                          DateFormat('d MMMM').format(_selectedDay),
+                          style: const TextStyle(
+                            fontSize: 26,
+                            fontWeight: FontWeight.w800,
+                            height: 1.1,
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: AppColors.successSoft,
+                            borderRadius: BorderRadius.circular(100),
+                          ),
+                          child: Text(
+                            '${moves.length} ${moves.length == 1 ? 'move' : 'moves'}',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w800,
+                              color: AppColors.primaryDeep,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
               ),
-              if (widget.onPrintDay != null)
-                OutlinedButton.icon(
-                  onPressed: moves.isEmpty
-                      ? null
-                      : () => widget.onPrintDay!(_selectedDay, moves),
-                  icon: const Icon(Icons.print_outlined, size: 17),
-                  label: const Text('Print'),
+              if (hasActions) ...[
+                const SizedBox(width: 8),
+                PopupMenuButton<String>(
+                  tooltip: 'Day report',
+                  enabled: moves.isNotEmpty,
+                  onSelected: (value) {
+                    if (value == 'pdf') {
+                      widget.onDownloadDay?.call(_selectedDay);
+                    } else {
+                      widget.onPrintDay?.call(_selectedDay, moves);
+                    }
+                  },
+                  itemBuilder: (_) => [
+                    if (widget.onDownloadDay != null)
+                      const PopupMenuItem(
+                        value: 'pdf',
+                        child: Text('Download PDF'),
+                      ),
+                    if (widget.onPrintDay != null)
+                      const PopupMenuItem(
+                        value: 'print',
+                        child: Text('Print'),
+                      ),
+                  ],
+                  child: Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: AppColors.background,
+                      border: Border.all(color: AppColors.border),
+                    ),
+                    child: Icon(
+                      Icons.picture_as_pdf_outlined,
+                      size: 20,
+                      color: moves.isEmpty
+                          ? AppColors.border
+                          : AppColors.textPrimary,
+                    ),
+                  ),
                 ),
+              ],
             ],
           ),
+
           const SizedBox(height: 14),
+
+          // ---- IN / OUT / NET ----
           Row(
             children: [
-              _statTile('Received', '+$inQty', AppColors.successSoft,
+              _statTile('IN', '+$inQty', AppColors.successSoft,
                   AppColors.primaryDeep),
               const SizedBox(width: 8),
-              _statTile(
-                  'Dispensed', '−$outQty', AppColors.errorSoft, AppColors.error),
+              _statTile('OUT', '-$outQty', AppColors.errorSoft, AppColors.error),
               const SizedBox(width: 8),
               _statTile(
-                'Net',
-                '${net >= 0 ? '+' : '−'}${net.abs()}',
+                'NET',
+                '${net > 0 ? '+' : (net < 0 ? '-' : '')}${net.abs()}',
                 AppColors.background,
                 AppColors.textPrimary,
               ),
-              const SizedBox(width: 8),
-              _statTile('Moves', '${moves.length}', AppColors.background,
-                  AppColors.textPrimary),
             ],
           ),
+
           if (moves.isEmpty) ...[
-            const SizedBox(height: 18),
+            const SizedBox(height: 22),
             Center(
               child: Column(
                 children: [
@@ -437,44 +541,90 @@ class _MovementCalendarState extends State<MovementCalendar> {
             ),
             const SizedBox(height: 6),
           ] else ...[
-            const SizedBox(height: 18),
-            Text('Medicines touched (${perMedicine.length})',
-                style: AppTextStyles.headingSmall),
-            const SizedBox(height: 8),
-            ...perMedicine.entries.map((e) {
+            const SizedBox(height: 22),
+            _sectionLabel('MEDICINES MOVED (${ordered.length})'),
+            const SizedBox(height: 10),
+            ...ordered.map((e) {
               final med = _medicine(e.key);
               final name = med?.name ??
                   moves.firstWhere((m) => m.medicineId == e.key).medicineName;
               final inQ = e.value[0], outQ = e.value[1];
+              final total = inQ + outQ;
 
               return Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: Row(
+                padding: const EdgeInsets.only(bottom: 14),
+                child: Column(
                   children: [
-                    MedicineImage(url: med?.imageUrl, size: 36, radius: 10),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        name.isEmpty ? 'Medicine #${e.key}' : name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: AppTextStyles.bodyMedium
-                            .copyWith(fontWeight: FontWeight.w700),
+                    Row(
+                      children: [
+                        MedicineImage(url: med?.imageUrl, size: 32, radius: 9),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            name.isEmpty ? 'Medicine #${e.key}' : name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: AppTextStyles.bodyMedium
+                                .copyWith(fontWeight: FontWeight.w800),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        if (inQ > 0)
+                          Text(
+                            '+$inQ',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w800,
+                              fontSize: 14,
+                              color: AppColors.primaryDeep,
+                            ),
+                          ),
+                        if (inQ > 0 && outQ > 0) const SizedBox(width: 8),
+                        if (outQ > 0)
+                          Text(
+                            '-$outQ',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w800,
+                              fontSize: 14,
+                              color: AppColors.error,
+                            ),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 7),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(100),
+                      child: SizedBox(
+                        height: 7,
+                        child: Row(
+                          children: [
+                            if (inQ > 0)
+                              Expanded(
+                                flex: (inQ * 1000 ~/ peak).clamp(1, 1000).toInt(),
+                                child: Container(color: AppColors.primary),
+                              ),
+                            if (outQ > 0)
+                              Expanded(
+                                flex: (outQ * 1000 ~/ peak).clamp(1, 1000).toInt(),
+                                child: Container(color: AppColors.error),
+                              ),
+                            Expanded(
+                              flex: (1000 - (total * 1000 ~/ peak))
+                                      .clamp(0, 1000)
+                                      .toInt() +
+                                  1,
+                              child: Container(color: AppColors.border),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
-                    if (inQ > 0)
-                      _qtyChip('+$inQ', AppColors.successSoft,
-                          AppColors.primaryDeep),
-                    if (inQ > 0 && outQ > 0) const SizedBox(width: 4),
-                    if (outQ > 0)
-                      _qtyChip('−$outQ', AppColors.errorSoft, AppColors.error),
                   ],
                 ),
               );
             }),
-            const SizedBox(height: 14),
-            Text('Timeline', style: AppTextStyles.headingSmall),
-            const SizedBox(height: 10),
+            const SizedBox(height: 8),
+            _sectionLabel('TIMELINE'),
+            const SizedBox(height: 12),
             ...List.generate(moves.length, (i) {
               final m = moves[i];
               final isLast = i == moves.length - 1;
@@ -483,7 +633,8 @@ class _MovementCalendarState extends State<MovementCalendar> {
 
               final details = <String>[
                 if (m.batchNumber.isNotEmpty) 'Batch ${m.batchNumber}',
-                'by ${m.who}${m.performedByRole.isEmpty ? '' : ' (${m.performedByRole.split('_').map((w) => w.isEmpty ? w : w[0] + w.substring(1).toLowerCase()).join(' ')})'}',
+                'by ${m.who}'
+                    '${m.performedByRole.isEmpty ? '' : ' (${User.prettyRoleName(m.performedByRole)})'}',
                 if (m.reference.isNotEmpty) m.reference,
               ].join('  ·  ');
 
@@ -491,95 +642,97 @@ class _MovementCalendarState extends State<MovementCalendar> {
                 behavior: HitTestBehavior.opaque,
                 onTap: () => showMovementDetails(context, m),
                 child: IntrinsicHeight(
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    SizedBox(
-                      width: 44,
-                      child: Padding(
-                        padding: const EdgeInsets.only(top: 2),
-                        child: Text(
-                          when == null ? '--:--' : timeFmt.format(when),
-                          style: AppTextStyles.bodySmall
-                              .copyWith(fontWeight: FontWeight.w800),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      SizedBox(
+                        width: 44,
+                        child: Padding(
+                          padding: const EdgeInsets.only(top: 2),
+                          child: Text(
+                            when == null ? '--:--' : timeFmt.format(when),
+                            style: AppTextStyles.bodySmall
+                                .copyWith(fontWeight: FontWeight.w800),
+                          ),
                         ),
                       ),
-                    ),
-                    Column(
-                      children: [
-                        Container(
-                          width: 22,
-                          height: 22,
-                          decoration: BoxDecoration(
-                            color: m.isIn
-                                ? AppColors.successSoft
-                                : AppColors.errorSoft,
-                            shape: BoxShape.circle,
-                          ),
-                          child: Icon(
-                            m.isIn
-                                ? Icons.south_west_rounded
-                                : Icons.north_east_rounded,
-                            size: 13,
-                            color: color,
-                          ),
-                        ),
-                        if (!isLast)
-                          Expanded(
-                            child: Container(width: 2, color: AppColors.border),
-                          ),
-                      ],
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Padding(
-                        padding: EdgeInsets.only(bottom: isLast ? 0 : 14),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: Text(
-                                    _name(m),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: AppTextStyles.bodyMedium
-                                        .copyWith(fontWeight: FontWeight.w800),
-                                  ),
-                                ),
-                                Text(
-                                  '${m.isIn ? '+' : '−'}${m.quantity}',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.w800,
-                                    fontSize: 15,
-                                    color: color,
-                                  ),
-                                ),
-                              ],
+                      Column(
+                        children: [
+                          Container(
+                            width: 22,
+                            height: 22,
+                            decoration: BoxDecoration(
+                              color: m.isIn
+                                  ? AppColors.successSoft
+                                  : AppColors.errorSoft,
+                              shape: BoxShape.circle,
                             ),
-                            Text(
-                              m.label,
-                              style: AppTextStyles.bodySmall.copyWith(color: color),
+                            child: Icon(
+                              m.isIn
+                                  ? Icons.south_west_rounded
+                                  : Icons.north_east_rounded,
+                              size: 13,
+                              color: color,
                             ),
-                            if (details.isNotEmpty)
-                              Text(details, style: AppTextStyles.bodySmall),
-                            if (m.note.isNotEmpty)
-                              Padding(
-                                padding: const EdgeInsets.only(top: 2),
-                                child: Text(
-                                  '“${m.note}”',
-                                  style: AppTextStyles.bodySmall
-                                      .copyWith(fontStyle: FontStyle.italic),
-                                ),
+                          ),
+                          if (!isLast)
+                            Expanded(
+                              child:
+                                  Container(width: 2, color: AppColors.border),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Padding(
+                          padding: EdgeInsets.only(bottom: isLast ? 0 : 14),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      _name(m),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: AppTextStyles.bodyMedium.copyWith(
+                                          fontWeight: FontWeight.w800),
+                                    ),
+                                  ),
+                                  Text(
+                                    '${m.isIn ? '+' : '-'}${m.quantity}',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w800,
+                                      fontSize: 15,
+                                      color: color,
+                                    ),
+                                  ),
+                                ],
                               ),
-                          ],
+                              Text(
+                                m.label,
+                                style: AppTextStyles.bodySmall
+                                    .copyWith(color: color),
+                              ),
+                              if (details.isNotEmpty)
+                                Text(details, style: AppTextStyles.bodySmall),
+                              if (m.note.isNotEmpty)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 2),
+                                  child: Text(
+                                    '"${m.note}"',
+                                    style: AppTextStyles.bodySmall
+                                        .copyWith(fontStyle: FontStyle.italic),
+                                  ),
+                                ),
+                            ],
+                          ),
                         ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
               );
             }),
           ],
@@ -588,38 +741,52 @@ class _MovementCalendarState extends State<MovementCalendar> {
     );
   }
 
+  Widget _sectionLabel(String text) => Text(
+        text,
+        style: TextStyle(
+          fontSize: 11.5,
+          fontWeight: FontWeight.w800,
+          letterSpacing: 0.6,
+          color: AppColors.textSecondary,
+        ),
+      );
+
   Widget _statTile(String label, String value, Color bg, Color fg) {
     return Expanded(
       child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 10),
+        padding: const EdgeInsets.symmetric(vertical: 11, horizontal: 12),
         decoration: BoxDecoration(
           color: bg,
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(16),
         ),
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              value,
+              label,
               style: TextStyle(
-                  fontWeight: FontWeight.w800, fontSize: 16, color: fg),
+                fontSize: 10.5,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 0.5,
+                color: AppColors.textSecondary,
+              ),
             ),
             const SizedBox(height: 2),
-            Text(label, style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700, color: AppColors.textSecondary)),
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: Text(
+                value,
+                style: TextStyle(
+                  fontWeight: FontWeight.w800,
+                  fontSize: 20,
+                  color: fg,
+                ),
+              ),
+            ),
           ],
         ),
       ),
     );
   }
-
-  Widget _qtyChip(String text, Color bg, Color fg) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-        decoration: BoxDecoration(
-          color: bg,
-          borderRadius: BorderRadius.circular(100),
-        ),
-        child: Text(
-          text,
-          style: TextStyle(fontWeight: FontWeight.w800, fontSize: 12, color: fg),
-        ),
-      );
 }

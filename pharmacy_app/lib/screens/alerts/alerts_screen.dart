@@ -22,7 +22,7 @@ enum _AlertTab { stock, expiry, inbox }
 ///  * Stock  — out of stock / running low, straight from the real stock levels
 ///  * Expiry — expired and soon-to-expire batches
 ///  * Inbox  — the server's notifications. An out-of-stock alert is repeated
-///             every 2 hours (phone notification too) until stock is added.
+///             once a day (phone notification too) until stock is added.
 class AlertsScreen extends StatefulWidget {
   const AlertsScreen({super.key});
 
@@ -255,8 +255,8 @@ class _AlertsScreenState extends State<AlertsScreen> {
       Padding(
         padding: const EdgeInsets.only(bottom: 10),
         child: Text(
-          'Out-of-stock items send a phone notification now and again every '
-          '2 hours until stock is added.',
+          'You get one out-of-stock and one expired-products phone '
+          'notification a day until the stock is fixed.',
           style: AppTextStyles.bodySmall,
         ),
       ),
@@ -303,7 +303,7 @@ class _AlertsScreenState extends State<AlertsScreen> {
                           queryParameters: {'medicine': '${medicine.id}'},
                         ).toString(),
                       ),
-                      child: const Text('Add stock'),
+                      child: const Text('Reorder'),
                     ),
                   ],
                 ),

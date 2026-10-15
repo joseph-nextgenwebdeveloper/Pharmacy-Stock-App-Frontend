@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
@@ -17,6 +18,7 @@ import '../../providers/batch_provider.dart';
 import '../../providers/inventory_provider.dart';
 import '../../providers/report_provider.dart';
 import '../../providers/stock_movement_provider.dart';
+import '../../routes/route_names.dart';
 import '../../services/report_printer.dart';
 import '../../widgets/error_widget.dart';
 import '../../widgets/loading_widget.dart';
@@ -66,6 +68,14 @@ class _ReportsScreenState extends State<ReportsScreen> {
         AppSizes.paddingMedium,
       ),
       children: [
+        _ReportCard(
+          title: 'Movement & Activity (PDF)',
+          description:
+              'Daily, weekly, monthly or custom-range report of everything '
+              'received, dispensed and changed.',
+          icon: Icons.picture_as_pdf_outlined,
+          onTap: () => context.push(RouteNames.activityReport),
+        ),
         _ReportCard(
           title: 'Inventory Report',
           description:

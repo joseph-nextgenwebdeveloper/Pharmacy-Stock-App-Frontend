@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 
 import '../models/batch.dart';
 import '../services/batch_service.dart';
+import '../services/stock_alert_service.dart';
 
 class BatchProvider extends ChangeNotifier {
   List<Batch> _batches = [];
@@ -29,6 +30,8 @@ class BatchProvider extends ChangeNotifier {
 
     try {
       _batches = await BatchService.getBatches();
+      // One "expired products" phone notification a day.
+      StockAlertService.syncExpired(_batches);
     } catch (e) {
       _error = e.toString();
     } finally {

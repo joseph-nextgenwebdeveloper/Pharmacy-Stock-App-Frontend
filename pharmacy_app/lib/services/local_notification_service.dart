@@ -20,7 +20,7 @@ class LocalNotificationService {
       stockChannelId,
       'Stock alerts',
       channelDescription:
-          'Out-of-stock alerts, repeated every 2 hours until restocked.',
+          'One daily out-of-stock and one daily expired-products reminder.',
       importance: Importance.high,
       priority: Priority.high,
       playSound: true,
@@ -77,7 +77,7 @@ class LocalNotificationService {
           stockChannelId,
           'Stock alerts',
           channelDescription:
-              'Out-of-stock alerts, repeated every 2 hours until restocked.',
+              'One daily out-of-stock and one daily expired-products reminder.',
           importance: Importance.high,
           priority: Priority.high,
           styleInformation: BigTextStyleInformation(body),
@@ -107,7 +107,7 @@ class LocalNotificationService {
           stockChannelId,
           'Stock alerts',
           channelDescription:
-              'Out-of-stock alerts, repeated every 2 hours until restocked.',
+              'One daily out-of-stock and one daily expired-products reminder.',
           importance: Importance.high,
           priority: Priority.high,
           styleInformation: BigTextStyleInformation(body),

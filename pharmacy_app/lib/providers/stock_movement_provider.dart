@@ -92,7 +92,9 @@ class StockMovementProvider extends ChangeNotifier {
         reference: reference,
       );
 
-      await loadMovements();
+      // Refresh in the background - the caller need not wait for the
+      // whole history to reload.
+      loadMovements();
 
       return true;
     } catch (e) {

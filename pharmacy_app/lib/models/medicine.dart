@@ -13,6 +13,9 @@ class Medicine {
   final String? barcode;
   final String units;
   final int reorderLevel;
+
+  /// Warn this many days before a batch expires.
+  final int expiryAlertDays;
   final String? imageUrl;
 
   const Medicine({
@@ -25,6 +28,7 @@ class Medicine {
     required this.sku,
     required this.units,
     required this.reorderLevel,
+    this.expiryAlertDays = 30,
     this.barcode,
     this.imageUrl,
   });
@@ -69,6 +73,7 @@ class Medicine {
       barcode: (rawBarcode == null || rawBarcode.isEmpty) ? null : rawBarcode,
       units: json['units'] ?? '',
       reorderLevel: json['reorder_level'] ?? 0,
+      expiryAlertDays: json['expiry_alert_days'] ?? 30,
       imageUrl: resolveImageUrl(
         (json['image'] as String?) ?? (json['image_url'] as String?),
       ),

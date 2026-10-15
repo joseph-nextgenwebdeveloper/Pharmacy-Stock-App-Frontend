@@ -58,7 +58,6 @@ class _ScannerScreenState extends State<ScannerScreen>
     BarcodeFormat.upcA,
     BarcodeFormat.upcE,
     BarcodeFormat.code128,
-    BarcodeFormat.code39,
     BarcodeFormat.dataMatrix,
     BarcodeFormat.qrCode,
   ];
@@ -325,25 +324,34 @@ class _ScannerScreenState extends State<ScannerScreen>
     if (value != null) await _handleCode(value);
   }
 
+  String? _lastCode;
+  DateTime _lastAt = DateTime.fromMillisecondsSinceEpoch(0);
+
+  /// The last few medicines handled here (shown under "Recent scans").
+  final List<_Recent> _recent = [];
+
   Future<void> _handleCode(String raw, {bool manual = false}) async {
     final code = raw.trim();
     if (code.isEmpty || _busy) return;
 
-    _busy = true;
-    HapticFeedback.mediumImpact();
-    await _enqueue(() async {
-      try {
-        await _controller.stop();
-      } catch (_) {}
-    });
-    if (!mounted) return;
+    // The same pack still in front of the camera right after a result.
+    if (!manual &&
+        code == _lastCode &&
+        DateTime.now().difference(_lastAt) < const Duration(seconds: 2)) {
+      return;
+    }
 
+    _busy = true;
+    _lastCode = code;
+    HapticFeedback.mediumImpact();
+
+    // NOTE: the camera is NOT stopped and restarted around a scan any more -
+    // that stop/start cycle was the main reason scanning felt slow. The
+    // _busy flag alone keeps new detections out while a sheet is open.
     if (widget.pickMode) {
       context.pop(code);
       return;
     }
-
-    setState(() => _message = 'Looking up…');
 
     final inventory = context.read<InventoryProvider>();
     if (inventory.medicines.isEmpty) await inventory.loadMedicines();
@@ -356,7 +364,20 @@ class _ScannerScreenState extends State<ScannerScreen>
     Medicine? target;
 
     if (matches.isEmpty) {
-      action = await _showNotFound(parsed) ?? _SheetAction.none;
+      if (manual) {
+        // Typed text that matches nothing - let the person decide.
+        action = await _showNotFound(parsed) ?? _SheetAction.none;
+      } else {
+        // A pack we have never seen: the point of scanning is to ADD it, so
+        // go straight to the new-medicine form with the barcode filled in.
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            duration: Duration(seconds: 2),
+            content: Text('New barcode - add this medicine.'),
+          ));
+        }
+        action = _SheetAction.registerMedicine;
+      }
     } else if (matches.length == 1) {
       target = matches.first;
     } else {
@@ -364,7 +385,12 @@ class _ScannerScreenState extends State<ScannerScreen>
     }
 
     if (target != null && mounted) {
-      action = await _showResult(target, parsed) ?? _SheetAction.none;
+      final found = target;
+      _recent.removeWhere((r) => r.medicine.id == found.id);
+      _recent.insert(0, _Recent(found, DateTime.now()));
+      if (_recent.length > 4) _recent.removeLast();
+
+      action = await _showResult(found, parsed) ?? _SheetAction.none;
     }
 
     if (!mounted) return;
@@ -392,8 +418,12 @@ class _ScannerScreenState extends State<ScannerScreen>
     }
 
     if (!mounted) return;
+    _lastAt = DateTime.now();
     _busy = false;
-    unawaited(_startCamera());
+
+    // Only restart the camera if it actually stopped (e.g. it was paused by
+    // the system while another screen was open).
+    if (!_controller.value.isRunning) unawaited(_startCamera());
   }
 
   /// Exact matches on barcode/GTIN, SKU or name. Typed searches also fall
@@ -616,6 +646,90 @@ class _ScannerScreenState extends State<ScannerScreen>
     );
   }
 
+  Widget _roundButton({required IconData icon, VoidCallback? onTap}) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 46,
+        height: 46,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: Colors.white.withValues(alpha: 0.08),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
+        ),
+        child: Icon(
+          icon,
+          size: 22,
+          color: onTap == null ? Colors.white30 : Colors.white,
+        ),
+      ),
+    );
+  }
+
+  Widget _recentScans() {
+    if (_recent.isEmpty || widget.pickMode) return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 14),
+        Text(
+          'RECENT SCANS',
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w800,
+            letterSpacing: 0.6,
+            color: AppColors.textSecondary,
+          ),
+        ),
+        const SizedBox(height: 8),
+        for (final r in _recent.take(2))
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => _handleCode(r.medicine.sku, manual: true),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 6),
+              child: Row(
+                children: [
+                  Container(
+                    width: 46,
+                    height: 46,
+                    decoration: BoxDecoration(
+                      color: AppColors.successSoft,
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: Icon(Icons.medication_outlined,
+                        color: AppColors.primaryDeep),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          r.medicine.name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                              fontWeight: FontWeight.w800, fontSize: 15.5),
+                        ),
+                        Text(
+                          '${r.medicine.sku} · ${Formatter.timeAgo(r.at.toIso8601String())}',
+                          style: AppTextStyles.bodySmall,
+                        ),
+                      ],
+                    ),
+                  ),
+                  Icon(Icons.chevron_right_rounded,
+                      color: AppColors.textSecondary),
+                ],
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -624,43 +738,41 @@ class _ScannerScreenState extends State<ScannerScreen>
         child: Column(
           children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(8, 4, 8, 4),
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
               child: Row(
                 children: [
-                  IconButton(
-                    onPressed: () => widget.pickMode
+                  _roundButton(
+                    icon: Icons.close_rounded,
+                    onTap: () => widget.pickMode
                         ? context.pop()
                         : context.go(RouteNames.dashboard),
-                    icon: const Icon(Icons.close_rounded, color: Colors.white),
                   ),
-                  const Spacer(),
-                  Text(
-                    widget.pickMode ? 'Scan to fill barcode' : 'Scan barcode',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w800,
-                      fontSize: 16,
+                  Expanded(
+                    child: Text(
+                      widget.pickMode ? 'Scan to fill barcode' : 'Scan barcode',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w800,
+                        fontSize: 17,
+                      ),
                     ),
                   ),
-                  const Spacer(),
                   ValueListenableBuilder<MobileScannerState>(
                     valueListenable: _controller,
                     builder: (context, state, _) {
                       final ready = state.isRunning;
-                      return IconButton(
-                        onPressed: ready
+                      return _roundButton(
+                        icon: state.torchState == TorchState.on
+                            ? Icons.flashlight_off_rounded
+                            : Icons.flashlight_on_rounded,
+                        onTap: ready
                             ? () async {
                                 try {
                                   await _controller.toggleTorch();
                                 } catch (_) {}
                               }
                             : null,
-                        icon: Icon(
-                          state.torchState == TorchState.on
-                              ? Icons.flashlight_off_rounded
-                              : Icons.flashlight_on_rounded,
-                          color: ready ? Colors.white : Colors.white30,
-                        ),
                       );
                     },
                   ),
@@ -684,13 +796,13 @@ class _ScannerScreenState extends State<ScannerScreen>
                         ),
                       ),
 
-                      // Viewfinder + sweeping line — only while the camera is
+                      // Viewfinder + sweeping line - only while the camera is
                       // actually showing (never drawn over the error text).
                       if (error == null)
                         Center(
                           child: SizedBox(
-                            width: 240,
-                            height: 240,
+                            width: 250,
+                            height: 250,
                             child: AnimatedBuilder(
                               animation: _scanLine,
                               builder: (context, _) => CustomPaint(
@@ -707,7 +819,7 @@ class _ScannerScreenState extends State<ScannerScreen>
                         Positioned(
                           left: 16,
                           right: 16,
-                          bottom: 16,
+                          bottom: 14,
                           child: Text(
                             _message ??
                                 (_starting && !state.isRunning
@@ -719,7 +831,7 @@ class _ScannerScreenState extends State<ScannerScreen>
                             style: const TextStyle(
                               color: Color(0xFFB9BEB9),
                               fontWeight: FontWeight.w700,
-                              fontSize: 13,
+                              fontSize: 14,
                             ),
                           ),
                         ),
@@ -738,31 +850,72 @@ class _ScannerScreenState extends State<ScannerScreen>
               ),
             ),
             Container(
-              padding: const EdgeInsets.fromLTRB(20, 18, 20, 20),
+              padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
               decoration: BoxDecoration(
-                color: AppColors.background,
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(26)),
+                color: AppColors.surface,
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(30)),
               ),
-              child: TextField(
-                controller: _manualController,
-                focusNode: _manualFocus,
-                textInputAction: TextInputAction.search,
-                onSubmitted: (v) => _handleCode(v, manual: true),
-                decoration: InputDecoration(
-                  hintText: 'Or type SKU / medicine name manually',
-                  prefixIcon: const Icon(Icons.search_rounded),
-                  suffixIcon: IconButton(
-                    icon: const Icon(Icons.arrow_forward_rounded),
-                    onPressed: () =>
-                        _handleCode(_manualController.text, manual: true),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  TextField(
+                    controller: _manualController,
+                    focusNode: _manualFocus,
+                    textInputAction: TextInputAction.search,
+                    onSubmitted: (v) => _handleCode(v, manual: true),
+                    decoration: InputDecoration(
+                      hintText: 'Or type SKU / name manually',
+                      prefixIcon: const Icon(Icons.search_rounded),
+                      suffixIcon: IconButton(
+                        icon: const Icon(Icons.arrow_forward_rounded),
+                        onPressed: () =>
+                            _handleCode(_manualController.text, manual: true),
+                      ),
+                      filled: true,
+                      fillColor: AppColors.background,
+                      contentPadding: const EdgeInsets.symmetric(vertical: 16),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(18),
+                        borderSide: BorderSide.none,
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(18),
+                        borderSide: BorderSide.none,
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(18),
+                        borderSide:
+                            const BorderSide(color: AppColors.primary, width: 1.4),
+                      ),
+                    ),
                   ),
-                  filled: true,
-                  fillColor: AppColors.surface,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(14),
-                    borderSide: BorderSide(color: AppColors.border),
-                  ),
-                ),
+                  if (!widget.pickMode) ...[
+                    const SizedBox(height: 8),
+                    GestureDetector(
+                      onTap: () => context.push(RouteNames.addMedicine),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 6),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.add_circle_outline_rounded,
+                                size: 18, color: AppColors.primaryDeep),
+                            const SizedBox(width: 6),
+                            const Text(
+                              'Add a new medicine',
+                              style: TextStyle(
+                                color: AppColors.primaryDeep,
+                                fontWeight: FontWeight.w800,
+                                fontSize: 13,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                  _recentScans(),
+                ],
               ),
             ),
           ],
@@ -770,6 +923,13 @@ class _ScannerScreenState extends State<ScannerScreen>
       ),
     );
   }
+}
+
+class _Recent {
+  final Medicine medicine;
+  final DateTime at;
+
+  const _Recent(this.medicine, this.at);
 }
 
 // ======================================================================
@@ -789,8 +949,9 @@ class _ScanResultSheet extends StatefulWidget {
 class _ScanResultSheetState extends State<_ScanResultSheet> {
   final _qtyController = TextEditingController(text: '1');
 
-  bool _isOut = true;
-  String _reason = 'DISPENSED';
+  // Scanning is mostly used to ADD stock, so the sheet opens on "Stock in".
+  bool _isOut = false;
+  String _reason = 'RECEIVED';
   int? _selectedBatchId;
   bool _saving = false;
   String? _error;
@@ -877,21 +1038,25 @@ class _ScanResultSheetState extends State<_ScanResultSheet> {
       return;
     }
 
-    await Future.wait([
-      context.read<BatchProvider>().loadBatches(),
-      context.read<InventoryProvider>().loadMedicines(),
-    ]);
-
-    if (!mounted) return;
-
+    // Close straight away and refresh in the background - waiting for the
+    // reloads before closing made every scan feel slow.
+    final batchProvider = context.read<BatchProvider>();
+    final inventoryProvider = context.read<InventoryProvider>();
     final messenger = ScaffoldMessenger.of(context);
+
     Navigator.of(context).pop(_SheetAction.none);
     messenger.showSnackBar(SnackBar(
+      duration: const Duration(seconds: 2),
       content: Text(
         '${(_isOut ? _outReasons : _inReasons)[_reason] ?? (_isOut ? 'Removed' : 'Received')}: '
         '$qty × ${medicine.name} (batch ${batch.batchNumber}).',
       ),
     ));
+
+    unawaited(Future.wait([
+      batchProvider.loadBatches(),
+      inventoryProvider.loadMedicines(),
+    ]));
   }
 
   @override
@@ -1291,22 +1456,50 @@ class _ScanFramePainter extends CustomPainter {
     final paint = Paint()
       ..color = AppColors.primary
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 3
+      ..strokeWidth = 4
       ..strokeCap = StrokeCap.round;
 
-    const len = 32.0;
+    // Rounded corner brackets, like the design.
+    const len = 46.0;
+    const r = 22.0;
+    final w = size.width, h = size.height;
 
-    // corners
-    canvas.drawLine(const Offset(0, 0), const Offset(len, 0), paint);
-    canvas.drawLine(const Offset(0, 0), const Offset(0, len), paint);
-    canvas.drawLine(Offset(size.width - len, 0), Offset(size.width, 0), paint);
-    canvas.drawLine(Offset(size.width, 0), Offset(size.width, len), paint);
-    canvas.drawLine(Offset(0, size.height - len), Offset(0, size.height), paint);
-    canvas.drawLine(Offset(0, size.height), Offset(len, size.height), paint);
-    canvas.drawLine(Offset(size.width - len, size.height),
-        Offset(size.width, size.height), paint);
-    canvas.drawLine(Offset(size.width, size.height - len),
-        Offset(size.width, size.height), paint);
+    // top-left
+    canvas.drawPath(
+      Path()
+        ..moveTo(0, len)
+        ..lineTo(0, r)
+        ..quadraticBezierTo(0, 0, r, 0)
+        ..lineTo(len, 0),
+      paint,
+    );
+    // top-right
+    canvas.drawPath(
+      Path()
+        ..moveTo(w - len, 0)
+        ..lineTo(w - r, 0)
+        ..quadraticBezierTo(w, 0, w, r)
+        ..lineTo(w, len),
+      paint,
+    );
+    // bottom-left
+    canvas.drawPath(
+      Path()
+        ..moveTo(0, h - len)
+        ..lineTo(0, h - r)
+        ..quadraticBezierTo(0, h, r, h)
+        ..lineTo(len, h),
+      paint,
+    );
+    // bottom-right
+    canvas.drawPath(
+      Path()
+        ..moveTo(w - len, h)
+        ..lineTo(w - r, h)
+        ..quadraticBezierTo(w, h, w, h - r)
+        ..lineTo(w, h - len),
+      paint,
+    );
 
     if (showLine) {
       final y = 10 + (size.height - 20) * progress;
